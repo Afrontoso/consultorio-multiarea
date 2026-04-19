@@ -1,0 +1,19 @@
+{
+  "name": "@consultorio/sdk",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@consultorio/config": "workspace:*",
+    "typescript": "^5.7.2"
+  }
+}

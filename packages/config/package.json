@@ -1,0 +1,15 @@
+{
+  "name": "@consultorio/config",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./index.js",
+  "files": ["eslint", "tsconfig", "tailwind"],
+  "exports": {
+    "./tsconfig/base.json": "./tsconfig/base.json",
+    "./tsconfig/next.json": "./tsconfig/next.json",
+    "./tsconfig/nest.json": "./tsconfig/nest.json",
+    "./tsconfig/package.json": "./tsconfig/package.json",
+    "./eslint/base.js": "./eslint/base.js",
+    "./tailwind/preset.js": "./tailwind/preset.js"
+  }
+}

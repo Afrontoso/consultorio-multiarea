@@ -1,0 +1,7 @@
+{
+  "extends": "@consultorio/config/tsconfig/package.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src", "prisma"]
+}

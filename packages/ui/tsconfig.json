@@ -1,0 +1,4 @@
+{
+  "extends": "@consultorio/config/tsconfig/next.json",
+  "include": ["src"]
+}

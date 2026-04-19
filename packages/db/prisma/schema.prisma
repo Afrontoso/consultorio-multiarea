@@ -1,0 +1,197 @@
+// Prisma schema — Consultório Multi-Área
+// See PLANO.md for rationale.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id           String         @id @default(cuid())
+  slug         String         @unique
+  name         String
+  category     HealthCategory
+  customDomain String?        @unique
+  domainStatus DomainStatus   @default(NONE)
+  planId       String
+  branding     Json?
+  settings     Json?
+  status       TenantStatus   @default(TRIAL)
+  trialEndsAt  DateTime?
+  createdAt    DateTime       @default(now())
+
+  plan          Plan           @relation(fields: [planId], references: [id])
+  users         User[]
+  professionals Professional[]
+  services      Service[]
+  patients      Patient[]
+  appointments  Appointment[]
+  subscription  Subscription?
+
+  @@index([customDomain])
+}
+
+model User {
+  id             String   @id @default(cuid())
+  firebaseUid    String   @unique
+  email          String
+  tenantId       String
+  role           UserRole
+  professionalId String?  @unique
+  patientId      String?  @unique
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model Professional {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  email     String
+  phone     String?
+  bio       String?
+  photoUrl  String?
+  color     String   @default("#3b82f6")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  appointments Appointment[]
+  services     Service[]     @relation("ProfessionalToService")
+  patients     Patient[]     @relation("PatientToProfessional")
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model Service {
+  id          String  @id @default(cuid())
+  tenantId    String
+  name        String
+  description String?
+  duration    Int
+  price       Decimal @db.Decimal(10, 2)
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  professionals Professional[] @relation("ProfessionalToService")
+  appointments  Appointment[]
+
+  @@index([tenantId])
+}
+
+model Patient {
+  id        String    @id @default(cuid())
+  tenantId  String
+  name      String
+  email     String?
+  phone     String
+  birthDate DateTime?
+  notes     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  appointments  Appointment[]
+  professionals Professional[] @relation("PatientToProfessional")
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+}
+
+model Appointment {
+  id               String   @id @default(cuid())
+  tenantId         String
+  date             DateTime
+  status           String   @default("CONFIRMED")
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  professionalId   String
+  patientId        String
+  serviceId        String
+  recurrence       String?
+  recurringEventId String?
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  professional Professional @relation(fields: [professionalId], references: [id])
+  patient      Patient      @relation(fields: [patientId], references: [id])
+  service      Service      @relation(fields: [serviceId], references: [id])
+
+  @@index([tenantId, date])
+}
+
+model Plan {
+  id                      String  @id @default(cuid())
+  code                    String  @unique
+  priceBRL                Decimal
+  maxProfessionals        Int
+  maxAppointmentsPerMonth Int
+  allowsCustomDomain      Boolean
+  allowsBranding          Boolean
+  featuresJson            Json
+
+  tenants Tenant[]
+}
+
+model Subscription {
+  id               String          @id @default(cuid())
+  tenantId         String          @unique
+  planId           String
+  provider         PaymentProvider
+  externalId       String
+  status           SubStatus
+  currentPeriodEnd DateTime
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+}
+
+enum HealthCategory {
+  PSICOLOGIA
+  FISIOTERAPIA
+  NUTRICAO
+  ODONTO
+  ESTETICA
+  TERAPIAS
+  PERSONAL
+  OUTROS
+}
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CANCELED
+}
+
+enum DomainStatus {
+  NONE
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+enum UserRole {
+  OWNER
+  STAFF
+  PROFESSIONAL
+  PATIENT
+}
+
+enum PaymentProvider {
+  STRIPE
+  MERCADO_PAGO
+}
+
+enum SubStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
