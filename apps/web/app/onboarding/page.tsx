@@ -7,6 +7,7 @@ import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebas
 import { CreateTenantSchema, type HealthCategory } from '@consultorio/contracts';
 import { getFirebaseAuth, googleProvider } from '../../lib/firebase';
 import { api, ApiError } from '../../lib/api';
+import { slugify } from '../../lib/slug';
 
 const CATEGORIES: { value: HealthCategory; label: string }[] = [
   { value: 'PSICOLOGIA', label: 'Psicologia' },
@@ -18,16 +19,6 @@ const CATEGORIES: { value: HealthCategory; label: string }[] = [
   { value: 'PERSONAL', label: 'Personal trainer' },
   { value: 'OUTROS', label: 'Outros' },
 ];
-
-function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '')
-    .slice(0, 40);
-}
 
 export default function OnboardingPage() {
   const router = useRouter();
