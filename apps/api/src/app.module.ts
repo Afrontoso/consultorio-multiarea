@@ -2,7 +2,10 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { FirebaseModule } from './modules/firebase/firebase.module';
 import { HealthController } from './modules/health/health.controller';
+import { MeModule } from './modules/me/me.module';
 import { PrismaModule } from './modules/prisma/prisma.module';
+import { ProfessionalsModule } from './modules/professionals/professionals.module';
+import { ServicesModule } from './modules/services/services.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 
 @Module({
@@ -11,6 +14,9 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     PrismaModule,
     FirebaseModule,
     TenantsModule,
+    MeModule,
+    ProfessionalsModule,
+    ServicesModule,
   ],
   controllers: [HealthController],
 })

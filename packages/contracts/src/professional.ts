@@ -13,3 +13,6 @@ export const CreateProfessionalSchema = z.object({
   serviceIds: z.array(z.string().cuid()).default([]),
 });
 export type CreateProfessionalInput = z.infer<typeof CreateProfessionalSchema>;
+
+export const UpdateProfessionalSchema = CreateProfessionalSchema.partial();
+export type UpdateProfessionalInput = z.infer<typeof UpdateProfessionalSchema>;

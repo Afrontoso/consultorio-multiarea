@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards, UsePipes } from '@nestjs/common';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { CreateTenantSchema, type CreateTenantInput } from '@consultorio/contracts';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { CurrentUser, type CurrentUserPayload } from '../../common/decorators/current-user.decorator';
@@ -11,8 +11,10 @@ export class TenantsController {
   constructor(private readonly tenants: TenantsService) {}
 
   @Post()
-  @UsePipes(new ZodValidationPipe(CreateTenantSchema))
-  async create(@Body() body: CreateTenantInput, @CurrentUser() user: CurrentUserPayload) {
+  async create(
+    @Body(new ZodValidationPipe(CreateTenantSchema)) body: CreateTenantInput,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
     const tenant = await this.tenants.createTenant(body, user.uid);
     return {
       id: tenant.id,

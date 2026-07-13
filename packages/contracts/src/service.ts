@@ -8,3 +8,6 @@ export const CreateServiceSchema = z.object({
   professionalIds: z.array(z.string().cuid()).default([]),
 });
 export type CreateServiceInput = z.infer<typeof CreateServiceSchema>;
+
+export const UpdateServiceSchema = CreateServiceSchema.partial();
+export type UpdateServiceInput = z.infer<typeof UpdateServiceSchema>;
