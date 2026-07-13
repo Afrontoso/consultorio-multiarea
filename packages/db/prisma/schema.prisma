@@ -25,13 +25,15 @@ model Tenant {
   trialEndsAt  DateTime?
   createdAt    DateTime       @default(now())
 
-  plan          Plan           @relation(fields: [planId], references: [id])
-  users         User[]
-  professionals Professional[]
-  services      Service[]
-  patients      Patient[]
-  appointments  Appointment[]
-  subscription  Subscription?
+  plan           Plan            @relation(fields: [planId], references: [id])
+  users          User[]
+  professionals  Professional[]
+  services       Service[]
+  patients       Patient[]
+  appointments   Appointment[]
+  subscription   Subscription?
+  workingHours   WorkingHours[]
+  scheduleBlocks ScheduleBlock[]
 
   @@index([customDomain])
 }
@@ -63,13 +65,48 @@ model Professional {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id])
-  appointments Appointment[]
-  services     Service[]     @relation("ProfessionalToService")
-  patients     Patient[]     @relation("PatientToProfessional")
+  tenant        Tenant          @relation(fields: [tenantId], references: [id])
+  appointments  Appointment[]
+  services      Service[]       @relation("ProfessionalToService")
+  patients      Patient[]       @relation("PatientToProfessional")
+  workingHours  WorkingHours[]
+  scheduleBlocks ScheduleBlock[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
+}
+
+// Faixa recorrente de atendimento (ex.: seg 09:00–12:00). Minutos desde 00:00
+// no fuso do consultório; várias faixas por dia são permitidas.
+model WorkingHours {
+  id             String @id @default(cuid())
+  tenantId       String
+  professionalId String
+  weekday        Int // 0=domingo … 6=sábado
+  startMinute    Int
+  endMinute      Int
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([professionalId, weekday])
+}
+
+// Bloqueio pontual de agenda (férias, almoço estendido, compromisso).
+model ScheduleBlock {
+  id             String   @id @default(cuid())
+  tenantId       String
+  professionalId String
+  startsAt       DateTime
+  endsAt         DateTime
+  reason         String?
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([professionalId, startsAt])
 }
 
 model Service {

@@ -23,7 +23,9 @@ BEGIN
     'Service',
     'Patient',
     'Appointment',
-    'Subscription'
+    'Subscription',
+    'WorkingHours',
+    'ScheduleBlock'
   ]) LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);

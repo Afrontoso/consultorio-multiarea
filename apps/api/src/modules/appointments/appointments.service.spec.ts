@@ -1,0 +1,196 @@
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { AppointmentsService } from './appointments.service';
+
+type PrismaMock = {
+  tenant: { findUniqueOrThrow: jest.Mock };
+  professional: { findFirst: jest.Mock };
+  service: { findFirst: jest.Mock };
+  patient: { findFirst: jest.Mock; upsert: jest.Mock };
+  appointment: {
+    findMany: jest.Mock;
+    findFirst: jest.Mock;
+    count: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
+  };
+  scheduleBlock: { findMany: jest.Mock };
+};
+
+function buildPrismaMock(): PrismaMock {
+  return {
+    tenant: { findUniqueOrThrow: jest.fn() },
+    professional: { findFirst: jest.fn() },
+    service: { findFirst: jest.fn() },
+    patient: { findFirst: jest.fn(), upsert: jest.fn() },
+    appointment: {
+      findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
+    scheduleBlock: { findMany: jest.fn().mockResolvedValue([]) },
+  };
+}
+
+const baseInput = {
+  date: new Date('2026-07-13T12:00:00Z'),
+  professionalId: 'prof-1',
+  serviceId: 'svc-1',
+  patient: { name: 'Paciente Teste', phone: '11999990000' },
+};
+
+function happyPathMocks(prisma: PrismaMock) {
+  prisma.tenant.findUniqueOrThrow.mockResolvedValue({
+    id: 't-1',
+    plan: { code: 'FREE', maxAppointmentsPerMonth: 30 },
+  });
+  prisma.professional.findFirst.mockResolvedValue({ id: 'prof-1' });
+  prisma.service.findFirst.mockResolvedValue({ id: 'svc-1', duration: 60 });
+  prisma.patient.upsert.mockResolvedValue({ id: 'pat-1' });
+  prisma.appointment.create.mockResolvedValue({ id: 'apt-1' });
+}
+
+describe('AppointmentsService', () => {
+  let prisma: PrismaMock;
+  let service: AppointmentsService;
+
+  beforeEach(() => {
+    prisma = buildPrismaMock();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    service = new AppointmentsService(prisma as any);
+  });
+
+  describe('create', () => {
+    it('cria agendamento com paciente inline (upsert por telefone)', async () => {
+      happyPathMocks(prisma);
+
+      await service.create('t-1', baseInput);
+
+      expect(prisma.patient.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tenantId_phone: { tenantId: 't-1', phone: '11999990000' } },
+        }),
+      );
+      expect(prisma.appointment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            tenantId: 't-1',
+            patientId: 'pat-1',
+            status: 'CONFIRMED',
+          }),
+        }),
+      );
+    });
+
+    it('rejeita profissional de outro tenant', async () => {
+      happyPathMocks(prisma);
+      prisma.professional.findFirst.mockResolvedValue(null);
+      await expect(service.create('t-1', baseInput)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('rejeita quando o limite mensal do plano foi atingido', async () => {
+      happyPathMocks(prisma);
+      prisma.appointment.count.mockResolvedValue(30);
+      await expect(service.create('t-1', baseInput)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+
+    it('agendamentos CANCELED não contam no limite mensal', async () => {
+      happyPathMocks(prisma);
+      await service.create('t-1', baseInput);
+      expect(prisma.appointment.count).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ status: { notIn: ['CANCELED'] } }),
+        }),
+      );
+    });
+
+    it('rejeita conflito com agendamento existente sobreposto', async () => {
+      happyPathMocks(prisma);
+      // Existente 11:30–12:30 UTC conflita com novo 12:00–13:00 UTC
+      prisma.appointment.findMany.mockResolvedValue([
+        { date: new Date('2026-07-13T11:30:00Z'), service: { duration: 60 } },
+      ]);
+      await expect(service.create('t-1', baseInput)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+
+    it('não conflita com agendamento que termina exatamente no início do novo', async () => {
+      happyPathMocks(prisma);
+      // Existente 11:00–12:00 UTC encosta no novo 12:00–13:00 UTC
+      prisma.appointment.findMany.mockResolvedValue([
+        { date: new Date('2026-07-13T11:00:00Z'), service: { duration: 60 } },
+      ]);
+      await expect(service.create('t-1', baseInput)).resolves.toBeDefined();
+    });
+
+    it('rejeita horário dentro de bloqueio de agenda', async () => {
+      happyPathMocks(prisma);
+      prisma.scheduleBlock.findMany.mockResolvedValue([{ id: 'blk-1' }]);
+      await expect(service.create('t-1', baseInput)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+
+    it('usa patientId existente sem upsert, validando o tenant', async () => {
+      happyPathMocks(prisma);
+      prisma.patient.findFirst.mockResolvedValue({ id: 'pat-9' });
+
+      await service.create('t-1', {
+        date: baseInput.date,
+        professionalId: 'prof-1',
+        serviceId: 'svc-1',
+        patientId: 'pat-9',
+      });
+
+      expect(prisma.patient.upsert).not.toHaveBeenCalled();
+      expect(prisma.appointment.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ patientId: 'pat-9' }) }),
+      );
+    });
+  });
+
+  describe('update', () => {
+    it('remarcar revalida conflito ignorando o próprio agendamento', async () => {
+      prisma.appointment.findFirst.mockResolvedValue({
+        id: 'apt-1',
+        date: new Date('2026-07-13T12:00:00Z'),
+        professionalId: 'prof-1',
+        service: { duration: 60 },
+      });
+      prisma.appointment.update.mockResolvedValue({ id: 'apt-1' });
+
+      await service.update('t-1', 'apt-1', { date: new Date('2026-07-13T15:00:00Z') });
+
+      expect(prisma.appointment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: { not: 'apt-1' } }),
+        }),
+      );
+    });
+
+    it('mudança só de status não roda checagem de conflito', async () => {
+      prisma.appointment.findFirst.mockResolvedValue({
+        id: 'apt-1',
+        date: new Date('2026-07-13T12:00:00Z'),
+        professionalId: 'prof-1',
+        service: { duration: 60 },
+      });
+      prisma.appointment.update.mockResolvedValue({ id: 'apt-1' });
+
+      await service.update('t-1', 'apt-1', { status: 'CANCELED' });
+
+      expect(prisma.appointment.findMany).not.toHaveBeenCalled();
+    });
+
+    it('agendamento de outro tenant é 404', async () => {
+      prisma.appointment.findFirst.mockResolvedValue(null);
+      await expect(
+        service.update('t-1', 'apt-alheio', { status: 'CANCELED' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+});

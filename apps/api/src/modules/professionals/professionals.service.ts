@@ -4,7 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { CreateProfessionalInput, UpdateProfessionalInput } from '@consultorio/contracts';
+import type {
+  CreateProfessionalInput,
+  CreateScheduleBlockInput,
+  SetWorkingHoursInput,
+  UpdateProfessionalInput,
+} from '@consultorio/contracts';
 import { PrismaService } from '../prisma/prisma.service';
 
 const SELECT = {
@@ -87,6 +92,56 @@ export class ProfessionalsService {
       );
     }
     await this.prisma.professional.delete({ where: { id } });
+    return { deleted: true };
+  }
+
+  async getWorkingHours(tenantId: string, professionalId: string) {
+    await this.ensureExists(tenantId, professionalId);
+    return this.prisma.workingHours.findMany({
+      where: { tenantId, professionalId },
+      orderBy: [{ weekday: 'asc' }, { startMinute: 'asc' }],
+      select: { id: true, weekday: true, startMinute: true, endMinute: true },
+    });
+  }
+
+  async setWorkingHours(tenantId: string, professionalId: string, input: SetWorkingHoursInput) {
+    await this.ensureExists(tenantId, professionalId);
+    await this.prisma.$transaction([
+      this.prisma.workingHours.deleteMany({ where: { tenantId, professionalId } }),
+      this.prisma.workingHours.createMany({
+        data: input.ranges.map((r) => ({ ...r, tenantId, professionalId })),
+      }),
+    ]);
+    return this.getWorkingHours(tenantId, professionalId);
+  }
+
+  async listBlocks(tenantId: string, professionalId: string) {
+    await this.ensureExists(tenantId, professionalId);
+    return this.prisma.scheduleBlock.findMany({
+      where: { tenantId, professionalId, endsAt: { gte: new Date() } },
+      orderBy: { startsAt: 'asc' },
+      select: { id: true, startsAt: true, endsAt: true, reason: true },
+    });
+  }
+
+  async createBlock(
+    tenantId: string,
+    professionalId: string,
+    input: CreateScheduleBlockInput,
+  ) {
+    await this.ensureExists(tenantId, professionalId);
+    return this.prisma.scheduleBlock.create({
+      data: { ...input, tenantId, professionalId },
+      select: { id: true, startsAt: true, endsAt: true, reason: true },
+    });
+  }
+
+  async removeBlock(tenantId: string, professionalId: string, blockId: string) {
+    const block = await this.prisma.scheduleBlock.findFirst({
+      where: { id: blockId, tenantId, professionalId },
+    });
+    if (!block) throw new NotFoundException('Bloqueio não encontrado.');
+    await this.prisma.scheduleBlock.delete({ where: { id: blockId } });
     return { deleted: true };
   }
 

@@ -51,8 +51,8 @@ describe('ServicesService', () => {
 
     const result = await service.list('t-1');
 
-    expect(result[0].price).toBe(180);
-    expect(typeof result[0].price).toBe('number');
+    expect(result[0]!.price).toBe(180);
+    expect(typeof result[0]!.price).toBe('number');
     expect(prisma.service.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { tenantId: 't-1' } }),
     );

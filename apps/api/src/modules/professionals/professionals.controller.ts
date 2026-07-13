@@ -1,8 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import {
   CreateProfessionalSchema,
+  CreateScheduleBlockSchema,
+  SetWorkingHoursSchema,
   UpdateProfessionalSchema,
   type CreateProfessionalInput,
+  type CreateScheduleBlockInput,
+  type SetWorkingHoursInput,
   type UpdateProfessionalInput,
 } from '@consultorio/contracts';
 import { ZodValidationPipe } from 'nestjs-zod';
@@ -42,5 +46,42 @@ export class ProfessionalsController {
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentMember() member: TenantMember) {
     return this.professionals.remove(member.tenantId, id);
+  }
+
+  @Get(':id/working-hours')
+  getWorkingHours(@Param('id') id: string, @CurrentMember() member: TenantMember) {
+    return this.professionals.getWorkingHours(member.tenantId, id);
+  }
+
+  @Put(':id/working-hours')
+  setWorkingHours(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(SetWorkingHoursSchema)) body: SetWorkingHoursInput,
+    @CurrentMember() member: TenantMember,
+  ) {
+    return this.professionals.setWorkingHours(member.tenantId, id, body);
+  }
+
+  @Get(':id/blocks')
+  listBlocks(@Param('id') id: string, @CurrentMember() member: TenantMember) {
+    return this.professionals.listBlocks(member.tenantId, id);
+  }
+
+  @Post(':id/blocks')
+  createBlock(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(CreateScheduleBlockSchema)) body: CreateScheduleBlockInput,
+    @CurrentMember() member: TenantMember,
+  ) {
+    return this.professionals.createBlock(member.tenantId, id, body);
+  }
+
+  @Delete(':id/blocks/:blockId')
+  removeBlock(
+    @Param('id') id: string,
+    @Param('blockId') blockId: string,
+    @CurrentMember() member: TenantMember,
+  ) {
+    return this.professionals.removeBlock(member.tenantId, id, blockId);
   }
 }

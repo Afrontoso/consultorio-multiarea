@@ -9,12 +9,40 @@ export const AppointmentStatusSchema = z.enum([
 ]);
 export type AppointmentStatus = z.infer<typeof AppointmentStatusSchema>;
 
-export const CreateAppointmentSchema = z.object({
-  date: z.coerce.date(),
-  professionalId: z.string().cuid(),
-  patientId: z.string().cuid(),
-  serviceId: z.string().cuid(),
-  notes: z.string().max(2000).optional(),
-  recurrence: z.enum(['WEEKLY', 'BIWEEKLY', 'MONTHLY']).optional(),
+// Paciente inline: criado (ou reaproveitado pelo telefone) junto com o agendamento.
+export const InlinePatientSchema = z.object({
+  name: z.string().min(2).max(120),
+  phone: z.string().min(8).max(20),
+  email: z.string().email().optional(),
 });
+export type InlinePatientInput = z.infer<typeof InlinePatientSchema>;
+
+export const CreateAppointmentSchema = z
+  .object({
+    date: z.coerce.date(),
+    professionalId: z.string().cuid(),
+    serviceId: z.string().cuid(),
+    patientId: z.string().cuid().optional(),
+    patient: InlinePatientSchema.optional(),
+    notes: z.string().max(2000).optional(),
+    recurrence: z.enum(['WEEKLY', 'BIWEEKLY', 'MONTHLY']).optional(),
+  })
+  .refine((data) => Boolean(data.patientId) !== Boolean(data.patient), {
+    message: 'Informe patientId ou os dados do paciente (exatamente um dos dois)',
+  });
 export type CreateAppointmentInput = z.infer<typeof CreateAppointmentSchema>;
+
+export const UpdateAppointmentSchema = z.object({
+  date: z.coerce.date().optional(),
+  status: AppointmentStatusSchema.optional(),
+  notes: z.string().max(2000).optional(),
+});
+export type UpdateAppointmentInput = z.infer<typeof UpdateAppointmentSchema>;
+
+export const ListAppointmentsQuerySchema = z.object({
+  professionalId: z.string().cuid().optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  status: AppointmentStatusSchema.optional(),
+});
+export type ListAppointmentsQuery = z.infer<typeof ListAppointmentsQuerySchema>;
