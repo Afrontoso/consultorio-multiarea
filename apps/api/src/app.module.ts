@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { AvailabilityModule } from './modules/availability/availability.module';
+import { BookingModule } from './modules/booking/booking.module';
 import { FirebaseModule } from './modules/firebase/firebase.module';
 import { HealthController } from './modules/health/health.controller';
 import { MeModule } from './modules/me/me.module';
@@ -21,6 +22,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     ServicesModule,
     AvailabilityModule,
     AppointmentsModule,
+    BookingModule,
   ],
   controllers: [HealthController],
 })

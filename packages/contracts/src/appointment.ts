@@ -32,6 +32,16 @@ export const CreateAppointmentSchema = z
   });
 export type CreateAppointmentInput = z.infer<typeof CreateAppointmentSchema>;
 
+// Agendamento vindo da página pública: paciente sempre inline, sem recorrência.
+export const PublicCreateAppointmentSchema = z.object({
+  date: z.coerce.date(),
+  professionalId: z.string().cuid(),
+  serviceId: z.string().cuid(),
+  patient: InlinePatientSchema,
+  notes: z.string().max(500).optional(),
+});
+export type PublicCreateAppointmentInput = z.infer<typeof PublicCreateAppointmentSchema>;
+
 export const UpdateAppointmentSchema = z.object({
   date: z.coerce.date().optional(),
   status: AppointmentStatusSchema.optional(),
