@@ -25,7 +25,7 @@ export default function OnboardingPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
-  const [slug, setSlug] = useState('');
+  const [manualSlug, setManualSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
   const [name, setName] = useState('');
   const [category, setCategory] = useState<HealthCategory>('PSICOLOGIA');
@@ -40,9 +40,8 @@ export default function OnboardingPage() {
     return unsub;
   }, []);
 
-  useEffect(() => {
-    if (!slugTouched && name) setSlug(slugify(name));
-  }, [name, slugTouched]);
+  // Derivado no render: acompanha o nome até o usuário editar o campo.
+  const slug = slugTouched ? manualSlug : slugify(name);
 
   async function loginWithGoogle() {
     setError(null);
@@ -212,7 +211,7 @@ export default function OnboardingPage() {
                     <input
                       value={slug}
                       onChange={(e) => {
-                        setSlug(slugify(e.target.value));
+                        setManualSlug(slugify(e.target.value));
                         setSlugTouched(true);
                       }}
                       required

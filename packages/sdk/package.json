@@ -9,11 +9,12 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@consultorio/config": "workspace:*",
+    "eslint": "^9.39.5",
     "typescript": "^5.7.2"
   }
 }

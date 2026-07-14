@@ -7,7 +7,6 @@ async function bootstrap() {
   app.setGlobalPrefix('v1');
   const port = Number(process.env.PORT ?? 3333);
   await app.listen(port);
-  // eslint-disable-next-line no-console
   console.log(`[api] listening on http://localhost:${port}`);
 }
 

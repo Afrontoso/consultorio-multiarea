@@ -3,7 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "main": "./index.js",
-  "files": ["eslint", "tsconfig", "tailwind"],
+  "files": [
+    "eslint",
+    "tsconfig",
+    "tailwind"
+  ],
   "exports": {
     "./tsconfig/base.json": "./tsconfig/base.json",
     "./tsconfig/next.json": "./tsconfig/next.json",
@@ -11,5 +15,11 @@
     "./tsconfig/package.json": "./tsconfig/package.json",
     "./eslint/base.js": "./eslint/base.js",
     "./tailwind/preset.js": "./tailwind/preset.js"
+  },
+  "dependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "typescript-eslint": "^8.64.0"
   }
 }

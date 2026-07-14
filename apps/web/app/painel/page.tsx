@@ -23,17 +23,17 @@ export default function PainelPage() {
     const unsub = onAuthStateChanged(getFirebaseAuth(), (u) => {
       setUser(u);
       setLoadingAuth(false);
+      setError(null);
+      if (!u) {
+        setMe(null);
+        setNoTenant(false);
+      }
     });
     return unsub;
   }, []);
 
   useEffect(() => {
-    if (!user) {
-      setMe(null);
-      setNoTenant(false);
-      return;
-    }
-    setError(null);
+    if (!user) return;
     api<Me>('/me')
       .then(setMe)
       .catch((e) => {

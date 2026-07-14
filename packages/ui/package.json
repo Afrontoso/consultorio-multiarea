@@ -10,7 +10,7 @@
     "./styles.css": "./src/styles.css"
   },
   "scripts": {
-    "lint": "eslint src --ext .ts,.tsx",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
@@ -26,6 +26,7 @@
     "@consultorio/config": "workspace:*",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "eslint": "^9.39.5",
     "typescript": "^5.7.2"
   }
 }
