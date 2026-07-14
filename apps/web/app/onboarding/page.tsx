@@ -7,6 +7,7 @@ import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebas
 import { CreateTenantSchema, type HealthCategory } from '@consultorio/contracts';
 import { getFirebaseAuth, googleProvider } from '../../lib/firebase';
 import { api, ApiError } from '../../lib/api';
+import type { Me } from '../../lib/painel-types';
 import { slugify } from '../../lib/slug';
 
 const CATEGORIES: { value: HealthCategory; label: string }[] = [
@@ -24,6 +25,8 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
+  // Consultório existente do usuário logado: 'checking' até o /me responder.
+  const [existing, setExisting] = useState<'checking' | 'none' | Me>('checking');
 
   const [manualSlug, setManualSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
@@ -36,9 +39,27 @@ export default function OnboardingPage() {
     const unsub = onAuthStateChanged(getFirebaseAuth(), (u) => {
       setUser(u);
       setLoadingAuth(false);
+      setExisting('checking');
     });
     return unsub;
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    let stale = false;
+    api<Me>('/me')
+      .then((me) => {
+        if (!stale) setExisting(me);
+      })
+      .catch(() => {
+        // 404 = sem consultório; outros erros caem no formulário mesmo
+        // (o submit reporta o problema real).
+        if (!stale) setExisting('none');
+      });
+    return () => {
+      stale = true;
+    };
+  }, [user]);
 
   // Derivado no render: acompanha o nome até o usuário editar o campo.
   const slug = slugTouched ? manualSlug : slugify(name);
@@ -170,6 +191,36 @@ export default function OnboardingPage() {
                 Ao continuar você concorda com os termos e a política de privacidade. LGPD,
                 sem letrinhas miúdas.
               </p>
+            </div>
+          ) : existing === 'checking' ? (
+            <p className="font-serif italic text-[color:var(--color-ink-soft)]">
+              Conferindo seu caderno…
+            </p>
+          ) : existing !== 'none' ? (
+            <div className="max-w-md">
+              <p className="section-number">§ Já registrado</p>
+              <h2 className="font-serif text-4xl md:text-5xl mt-3 leading-[1.05] tracking-[-0.02em]">
+                Você já tem o{' '}
+                <em className="text-[color:var(--color-moss)]">{existing.tenant.name}</em>.
+              </h2>
+              <p className="mt-4 text-[color:var(--color-ink-soft)] leading-relaxed max-w-[44ch]">
+                Cada conta administra um consultório. Para abrir outro, entre com uma conta
+                Google diferente.
+              </p>
+              <div className="mt-8 flex flex-wrap items-center gap-4">
+                <Link href="/painel" className="btn-clay">
+                  Ir para o painel →
+                </Link>
+                <a href={`/c/${existing.tenant.slug}`} className="btn-ghost">
+                  Ver página pública
+                </a>
+              </div>
+              <button
+                onClick={() => signOut(getFirebaseAuth())}
+                className="text-xs link-editorial mt-8 block"
+              >
+                trocar conta ({user.email})
+              </button>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="max-w-xl">
