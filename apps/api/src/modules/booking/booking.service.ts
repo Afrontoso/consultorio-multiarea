@@ -11,6 +11,30 @@ export class BookingService {
     private readonly appointments: AppointmentsService,
   ) {}
 
+  /** Perfil público do consultório: vitrine com profissionais e serviços. */
+  async profile(slug: string) {
+    const tenant = await this.activeTenant(slug);
+
+    const [professionals, services] = await Promise.all([
+      this.prisma.professional.findMany({
+        where: { tenantId: tenant.id },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, bio: true, photoUrl: true, color: true },
+      }),
+      this.prisma.service.findMany({
+        where: { tenantId: tenant.id },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, description: true, duration: true, price: true },
+      }),
+    ]);
+
+    return {
+      tenant: { slug: tenant.slug, name: tenant.name, category: tenant.category },
+      professionals,
+      services: services.map((s) => ({ ...s, price: Number(s.price) })),
+    };
+  }
+
   /** Catálogo público: dados do consultório + serviços com quem os realiza. */
   async catalog(slug: string) {
     const tenant = await this.activeTenant(slug);

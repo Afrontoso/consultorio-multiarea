@@ -11,6 +11,11 @@ import { BookingService } from './booking.service';
 export class BookingController {
   constructor(private readonly booking: BookingService) {}
 
+  @Get()
+  profile(@Param('slug') slug: string) {
+    return this.booking.profile(slug);
+  }
+
   @Get('booking')
   catalog(@Param('slug') slug: string) {
     return this.booking.catalog(slug);

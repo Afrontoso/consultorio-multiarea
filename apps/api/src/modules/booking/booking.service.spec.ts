@@ -5,12 +5,14 @@ import { DEFAULT_UTC_OFFSET_MINUTES } from '../availability/slots';
 type PrismaMock = {
   tenant: { findUnique: jest.Mock };
   service: { findMany: jest.Mock };
+  professional: { findMany: jest.Mock };
 };
 
 function buildPrismaMock(): PrismaMock {
   return {
     tenant: { findUnique: jest.fn() },
     service: { findMany: jest.fn().mockResolvedValue([]) },
+    professional: { findMany: jest.fn().mockResolvedValue([]) },
   };
 }
 
@@ -33,6 +35,40 @@ describe('BookingService', () => {
     appointments = { create: jest.fn() };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     service = new BookingService(prisma as any, appointments as any);
+  });
+
+  describe('profile', () => {
+    it('retorna tenant, profissionais e serviços com preço numérico', async () => {
+      prisma.tenant.findUnique.mockResolvedValue(activeTenant);
+      prisma.professional.findMany.mockResolvedValue([
+        { id: 'prof-1', name: 'Ana', bio: 'Psicóloga', photoUrl: null, color: '#333' },
+      ]);
+      prisma.service.findMany.mockResolvedValue([
+        { id: 'svc-1', name: 'Sessão', description: null, duration: 50, price: '180.00' },
+      ]);
+
+      const result = await service.profile('clinica-exemplo');
+
+      expect(result.tenant).toEqual({
+        slug: 'clinica-exemplo',
+        name: 'Clínica Exemplo',
+        category: 'PSICOLOGIA',
+      });
+      expect(result.professionals).toHaveLength(1);
+      expect(result.services[0]!.price).toBe(180);
+    });
+
+    it('404 para slug inexistente', async () => {
+      prisma.tenant.findUnique.mockResolvedValue(null);
+
+      await expect(service.profile('nao-existe')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('404 para tenant suspenso', async () => {
+      prisma.tenant.findUnique.mockResolvedValue({ ...activeTenant, status: 'SUSPENDED' });
+
+      await expect(service.profile('clinica-exemplo')).rejects.toBeInstanceOf(NotFoundException);
+    });
   });
 
   describe('catalog', () => {
