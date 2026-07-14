@@ -6,10 +6,11 @@ import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebas
 import { getFirebaseAuth, googleProvider } from '../../lib/firebase';
 import { api, ApiError } from '../../lib/api';
 import type { Me } from '../../lib/painel-types';
+import { AgendaSection } from './agenda-section';
 import { ProfessionalsSection } from './professionals-section';
 import { ServicesSection } from './services-section';
 
-type Tab = 'professionals' | 'services';
+type Tab = 'agenda' | 'professionals' | 'services';
 
 export default function PainelPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -17,7 +18,7 @@ export default function PainelPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [noTenant, setNoTenant] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>('professionals');
+  const [tab, setTab] = useState<Tab>('agenda');
 
   useEffect(() => {
     const unsub = onAuthStateChanged(getFirebaseAuth(), (u) => {
@@ -137,6 +138,7 @@ export default function PainelPage() {
             <nav className="mt-10 flex gap-6 border-b border-[color:var(--color-rule)]">
               {(
                 [
+                  ['agenda', 'Agenda'],
                   ['professionals', 'Profissionais'],
                   ['services', 'Serviços'],
                 ] as [Tab, string][]
@@ -156,7 +158,9 @@ export default function PainelPage() {
             </nav>
 
             <div className="mt-10">
-              {tab === 'professionals' ? <ProfessionalsSection me={me} /> : <ServicesSection />}
+              {tab === 'agenda' && <AgendaSection />}
+              {tab === 'professionals' && <ProfessionalsSection me={me} />}
+              {tab === 'services' && <ServicesSection />}
             </div>
           </>
         )}

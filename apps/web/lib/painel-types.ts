@@ -22,6 +22,32 @@ export interface Professional {
   services: { id: string; name: string }[];
 }
 
+export type AppointmentStatus = 'CONFIRMED' | 'PENDING' | 'CANCELED' | 'COMPLETED' | 'NO_SHOW';
+
+export interface AppointmentItem {
+  id: string;
+  date: string;
+  status: AppointmentStatus;
+  notes: string | null;
+  professional: { id: string; name: string; color: string };
+  patient: { id: string; name: string; phone: string };
+  service: { id: string; name: string; duration: number };
+}
+
+export interface WorkingHourRange {
+  id: string;
+  weekday: number;
+  startMinute: number;
+  endMinute: number;
+}
+
+export interface ScheduleBlockItem {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  reason: string | null;
+}
+
 export interface Service {
   id: string;
   name: string;

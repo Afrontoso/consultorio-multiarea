@@ -16,7 +16,8 @@ description: Receita para buildar, subir e dirigir o app (API NestJS + web Next.
 ## Dirigir
 - Endpoints públicos (sem auth): `GET /v1/public/tenants/:slug/booking`, `GET .../availability?professionalId=&serviceId=&date=YYYY-MM-DD`, `POST .../appointments`.
 - Browser: Playwright não está no repo — instalar no scratchpad (`npm i playwright && npx playwright install chromium`) e dirigir com um script `.mjs`. O CSS usa animação `stagger` (filhos começam com opacity 0, até ~1.6s de delay) — esperar `waitForTimeout(1600)` antes de screenshots.
-- Rotas autenticadas exigem Firebase idToken; fluxos logados (painel/onboarding) não são verificáveis por curl.
+- Fluxos logados (painel/onboarding) SÃO verificáveis: existe o usuário de teste `firebaseUid=e2e-sched-claude` (OWNER do tenant e2e). Gerar custom token com `firebase-admin` (require a partir de `apps/api/node_modules`, credenciais do `apps/api/.env`), e no Playwright: carregar qualquer página do app, `page.evaluate` importando o SDK web do CDN gstatic (v12), `initializeApp(config)` **sem nome** (a persistência no indexedDB é chaveada por `apiKey:[DEFAULT]`; o registro do CDN não colide com o bundle), `signInWithCustomToken`, esperar ~1,5s e recarregar — o app reconhece a sessão. Config do client em `apps/web/.env.local`.
+- Nos cards da agenda do painel, o estado `open` sobrevive a refetches (mesma key React) — em drives, escopar cliques pelo card (`locator('div.border-l-4').filter({ hasText: ... })`), senão "cancelar consulta" pode acertar outro card.
 
 ## Limpar
 - Apagar agendamentos/pacientes criados no tenant de teste via psql (Appointment antes de Patient, por FK).
