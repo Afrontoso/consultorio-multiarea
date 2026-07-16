@@ -3,12 +3,16 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import type { Professional, Service } from '../../lib/painel-types';
+import {
+  centavosToNumber,
+  formatBRL,
+  formatMoneyBR,
+  moneyDigits,
+  numberToCentavos,
+} from '../../lib/money';
 
+// price guarda centavos como dígitos (máscara em lib/money.ts)
 const emptyForm = { name: '', description: '', duration: '50', price: '', professionalIds: [] as string[] };
-
-function formatBRL(value: number) {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 export function ServicesSection() {
   const [items, setItems] = useState<Service[] | null>(null);
@@ -34,7 +38,7 @@ export function ServicesSection() {
       name: s.name,
       description: s.description ?? '',
       duration: String(s.duration),
-      price: String(s.price),
+      price: numberToCentavos(s.price),
       professionalIds: s.professionals.map((p) => p.id),
     });
     setShowForm(true);
@@ -65,7 +69,7 @@ export function ServicesSection() {
       name: form.name,
       description: form.description || undefined,
       duration: Number(form.duration),
-      price: Number(form.price.replace(',', '.')),
+      price: centavosToNumber(form.price),
       professionalIds: form.professionalIds,
     };
     try {
@@ -157,9 +161,9 @@ export function ServicesSection() {
             <label className="block">
               <span className="kicker">Preço (R$)</span>
               <input
-                inputMode="decimal"
-                value={form.price}
-                onChange={(e) => setForm({ ...form, price: e.target.value })}
+                inputMode="numeric"
+                value={formatMoneyBR(form.price)}
+                onChange={(e) => setForm({ ...form, price: moneyDigits(e.target.value) })}
                 required
                 placeholder="180,00"
                 className="input-editorial mt-2"

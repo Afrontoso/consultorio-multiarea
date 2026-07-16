@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../../../../lib/api';
+import { formatBRL } from '../../../../lib/money';
 import { formatPhoneBR, phoneDigits } from '../../../../lib/phone';
 
 interface BookingProfessional {
@@ -50,10 +51,6 @@ const STEP_ORDER: Exclude<Step, 'sucesso'>[] = [
 ];
 
 const DAYS_AHEAD = 14;
-
-function formatBRL(value: number) {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 /** Componentes de data "hoje" no fuso do consultório. */
 function shiftedNow(utcOffsetMinutes: number) {

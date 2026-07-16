@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
+import { formatBRL } from '../../../lib/money';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333/v1';
 
@@ -31,10 +32,6 @@ const CATEGORY_LABEL: Record<string, string> = {
   PERSONAL: 'Personal trainer',
   OUTROS: 'Saúde e bem-estar',
 };
-
-function formatBRL(value: number) {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 async function fetchProfile(slug: string): Promise<PublicProfile | null> {
   const res = await fetch(`${API_URL}/public/tenants/${slug}`, { cache: 'no-store' });

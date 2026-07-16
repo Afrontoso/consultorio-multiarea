@@ -29,4 +29,9 @@ describe('CreateServiceSchema', () => {
   it('rejects price beyond decimal(10,2) limit', () => {
     expect(() => CreateServiceSchema.parse({ ...valid, price: 100000 })).toThrow();
   });
+
+  it('rejeita price com mais de 2 casas decimais', () => {
+    expect(() => CreateServiceSchema.parse({ ...valid, price: 180.999 })).toThrow();
+    expect(CreateServiceSchema.parse({ ...valid, price: 180.5 }).price).toBe(180.5);
+  });
 });
