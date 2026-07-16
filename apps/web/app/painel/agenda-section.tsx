@@ -13,6 +13,7 @@ import {
   startOfWeek,
   toDatetimeLocal,
 } from '../../lib/agenda';
+import { formatPhoneBR, phoneDigits } from '../../lib/phone';
 import { BlocksView } from './blocks-view';
 import { WorkingHoursView } from './working-hours-view';
 
@@ -287,7 +288,9 @@ function AppointmentCard({
 
       {open && (
         <div className="px-2 pb-2 space-y-2">
-          <p className="text-xs text-[color:var(--color-ink-soft)]">☎ {a.patient.phone}</p>
+          <p className="text-xs text-[color:var(--color-ink-soft)]">
+            ☎ {formatPhoneBR(a.patient.phone)}
+          </p>
           {!canceled && (
             <>
               <div className="space-y-1">
@@ -449,11 +452,11 @@ function CreateAppointmentForm({
           <span className="kicker">Telefone</span>
           <input
             type="tel"
-            value={form.patientPhone}
-            onChange={(e) => setForm({ ...form, patientPhone: e.target.value })}
+            value={formatPhoneBR(form.patientPhone)}
+            onChange={(e) => setForm({ ...form, patientPhone: phoneDigits(e.target.value) })}
             required
-            minLength={8}
-            maxLength={20}
+            minLength={14}
+            maxLength={16}
             placeholder="(11) 99999-0000"
             className="input-editorial mt-2"
           />

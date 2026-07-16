@@ -9,18 +9,19 @@ describe('CreatePatientSchema', () => {
     expect(parsed.name).toBe('João');
   });
 
-  it('accepts phone without leading +', () => {
-    expect(CreatePatientSchema.parse({ ...valid, phone: '5511999990000' }).phone).toBe(
-      '5511999990000',
+  it('normaliza o + fora: telefone canônico é só dígitos', () => {
+    expect(CreatePatientSchema.parse(valid).phone).toBe('5511999990000');
+  });
+
+  it('normaliza entrada com máscara para só dígitos', () => {
+    expect(CreatePatientSchema.parse({ ...valid, phone: '(11) 99999-0000' }).phone).toBe(
+      '11999990000',
     );
   });
 
-  it('rejects phone with letters', () => {
-    expect(() => CreatePatientSchema.parse({ ...valid, phone: '11-9999-0000' })).toThrow();
-  });
-
-  it('rejects phone too short', () => {
+  it('rejects phone too short (mesmo depois de normalizar)', () => {
     expect(() => CreatePatientSchema.parse({ ...valid, phone: '123' })).toThrow();
+    expect(() => CreatePatientSchema.parse({ ...valid, phone: '(11) 9999-000' })).toThrow();
   });
 
   it('rejects malformed email when present', () => {

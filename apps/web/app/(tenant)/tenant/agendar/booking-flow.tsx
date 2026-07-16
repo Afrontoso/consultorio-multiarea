@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../../../../lib/api';
+import { formatPhoneBR, phoneDigits } from '../../../../lib/phone';
 
 interface BookingProfessional {
   id: string;
@@ -447,11 +448,11 @@ export function BookingFlow({ slug }: { slug: string }) {
             <span className="kicker">Telefone (WhatsApp)</span>
             <input
               type="tel"
-              value={patient.phone}
-              onChange={(e) => setPatient({ ...patient, phone: e.target.value })}
+              value={formatPhoneBR(patient.phone)}
+              onChange={(e) => setPatient({ ...patient, phone: phoneDigits(e.target.value) })}
               required
-              minLength={8}
-              maxLength={20}
+              minLength={14}
+              maxLength={16}
               placeholder="(11) 99999-0000"
               className="input-editorial mt-2"
             />

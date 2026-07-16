@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PhoneSchema } from './patient';
 
 export const AppointmentStatusSchema = z.enum([
   'CONFIRMED',
@@ -12,7 +13,7 @@ export type AppointmentStatus = z.infer<typeof AppointmentStatusSchema>;
 // Paciente inline: criado (ou reaproveitado pelo telefone) junto com o agendamento.
 export const InlinePatientSchema = z.object({
   name: z.string().min(2).max(120),
-  phone: z.string().min(8).max(20),
+  phone: PhoneSchema,
   email: z.string().email().optional(),
 });
 export type InlinePatientInput = z.infer<typeof InlinePatientSchema>;

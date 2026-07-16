@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import type { Me, Professional } from '../../lib/painel-types';
+import { formatPhoneBR, phoneDigits } from '../../lib/phone';
 
 const COLORS = ['#3b82f6', '#2e4431', '#c16d4a', '#7c3aed', '#0d9488', '#b45309'];
 
@@ -154,8 +155,10 @@ export function ProfessionalsSection({ me }: { me: Me }) {
           <label className="block">
             <span className="kicker">Telefone (opcional)</span>
             <input
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              type="tel"
+              value={formatPhoneBR(form.phone)}
+              onChange={(e) => setForm({ ...form, phone: phoneDigits(e.target.value) })}
+              maxLength={16}
               placeholder="(11) 99999-0000"
               className="input-editorial mt-2"
             />
