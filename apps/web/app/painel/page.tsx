@@ -7,10 +7,11 @@ import { getFirebaseAuth, googleProvider } from '../../lib/firebase';
 import { api, ApiError } from '../../lib/api';
 import type { Me } from '../../lib/painel-types';
 import { AgendaSection } from './agenda-section';
+import { PatientsSection } from './patients-section';
 import { ProfessionalsSection } from './professionals-section';
 import { ServicesSection } from './services-section';
 
-type Tab = 'agenda' | 'professionals' | 'services';
+type Tab = 'agenda' | 'patients' | 'professionals' | 'services';
 
 export default function PainelPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -139,6 +140,7 @@ export default function PainelPage() {
               {(
                 [
                   ['agenda', 'Agenda'],
+                  ['patients', 'Pacientes'],
                   ['professionals', 'Profissionais'],
                   ['services', 'Serviços'],
                 ] as [Tab, string][]
@@ -159,6 +161,7 @@ export default function PainelPage() {
 
             <div className="mt-10">
               {tab === 'agenda' && <AgendaSection />}
+              {tab === 'patients' && <PatientsSection />}
               {tab === 'professionals' && <ProfessionalsSection me={me} />}
               {tab === 'services' && <ServicesSection />}
             </div>

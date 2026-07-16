@@ -196,7 +196,8 @@ export class AppointmentsService {
     }
     const patient = await this.prisma.patient.upsert({
       where: { tenantId_phone: { tenantId, phone: input.patient.phone } },
-      update: { name: input.patient.name, email: input.patient.email },
+      // Agendar de novo reativa ficha soft-deletada (consentimento renovado).
+      update: { name: input.patient.name, email: input.patient.email, deletedAt: null },
       create: { ...input.patient, tenantId },
     });
     return patient.id;

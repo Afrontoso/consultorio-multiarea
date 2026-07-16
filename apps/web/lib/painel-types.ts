@@ -48,6 +48,26 @@ export interface ScheduleBlockItem {
   reason: string | null;
 }
 
+export interface PatientItem {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string;
+  birthDate: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface PatientDetail extends PatientItem {
+  appointments: {
+    id: string;
+    date: string;
+    status: AppointmentStatus;
+    professional: { id: string; name: string; color: string };
+    service: { id: string; name: string; duration: number };
+  }[];
+}
+
 export interface Service {
   id: string;
   name: string;

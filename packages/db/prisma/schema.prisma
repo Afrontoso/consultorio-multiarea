@@ -132,6 +132,7 @@ model Patient {
   phone     String
   birthDate DateTime?
   notes     String?
+  deletedAt DateTime? // soft-delete (LGPD); purge definitivo fica para um job futuro
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
