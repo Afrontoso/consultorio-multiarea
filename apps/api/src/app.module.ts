@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { validateEnv } from './config/env';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { AvailabilityModule } from './modules/availability/availability.module';
 import { BookingModule } from './modules/booking/booking.module';
@@ -14,7 +16,8 @@ import { TenantsModule } from './modules/tenants/tenants.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
+    ThrottlerModule.forRoot([{ name: 'public', ttl: 60_000, limit: 30 }]),
     PrismaModule,
     FirebaseModule,
     TenantsModule,

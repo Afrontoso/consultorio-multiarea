@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   PublicCreateAppointmentSchema,
   type PublicCreateAppointmentInput,
@@ -7,6 +8,7 @@ import { ZodValidationPipe } from 'nestjs-zod';
 import { BookingService } from './booking.service';
 
 // Rotas públicas (sem auth): consumidas pela página de agendamento do paciente.
+@UseGuards(ThrottlerGuard)
 @Controller('public/tenants/:slug')
 export class BookingController {
   constructor(private readonly booking: BookingService) {}
@@ -21,6 +23,8 @@ export class BookingController {
     return this.booking.catalog(slug);
   }
 
+  // Criação de agendamento é o alvo natural de spam: limite bem mais apertado.
+  @Throttle({ public: { ttl: 60_000, limit: 5 } })
   @Post('appointments')
   book(
     @Param('slug') slug: string,

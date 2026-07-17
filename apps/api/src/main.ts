@@ -1,13 +1,22 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { corsOrigins, validateEnv } from './config/env';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { cors: true });
+  const env = validateEnv(process.env);
+
+  const app = await NestFactory.create(AppModule);
+  app.use(helmet());
+  app.enableCors({
+    origin: corsOrigins(env),
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Authorization', 'Content-Type', 'X-Tenant-Slug'],
+  });
   app.setGlobalPrefix('v1');
-  const port = Number(process.env.PORT ?? 3333);
-  await app.listen(port);
-  console.log(`[api] listening on http://localhost:${port}`);
+  await app.listen(env.PORT);
+  console.log(`[api] listening on http://localhost:${env.PORT}`);
 }
 
 void bootstrap();
