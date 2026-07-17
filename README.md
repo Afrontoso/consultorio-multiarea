@@ -1,5 +1,7 @@
 # Consultório Multi-Área
 
+[![CI](https://github.com/Afrontoso/consultorio-multiarea/actions/workflows/ci.yml/badge.svg)](https://github.com/Afrontoso/consultorio-multiarea/actions/workflows/ci.yml)
+
 SaaS de agendamento para consultórios multi-área (psicologia, fisioterapia, nutrição, etc.).
 
 Monorepo Turborepo + pnpm. Stack: Next.js 16, NestJS, Prisma, Supabase Postgres, Firebase Auth.
