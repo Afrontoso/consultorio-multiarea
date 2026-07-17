@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   addDays,
+  addMonths,
   dayKey,
   hhmmToMinutes,
   minutesToHHMM,
+  monthGridRange,
+  startOfMonth,
   startOfWeek,
   toDatetimeLocal,
 } from './agenda';
@@ -26,6 +29,32 @@ describe('startOfWeek', () => {
 describe('addDays / dayKey', () => {
   it('atravessa fim de mês', () => {
     expect(dayKey(addDays(new Date(2026, 6, 30), 3))).toBe('2026-08-02');
+  });
+});
+
+describe('startOfMonth / addMonths', () => {
+  it('retorna o dia 1 e navega entre meses', () => {
+    expect(dayKey(startOfMonth(new Date(2026, 6, 19)))).toBe('2026-07-01');
+    expect(dayKey(addMonths(new Date(2026, 6, 19), 1))).toBe('2026-08-01');
+    expect(dayKey(addMonths(new Date(2026, 0, 31), -1))).toBe('2025-12-01');
+  });
+});
+
+describe('monthGridRange', () => {
+  it('cobre o mês inteiro em semanas completas (segunda a domingo)', () => {
+    // Julho/2026: dia 1 é quarta; dia 31 é sexta.
+    const { start, end } = monthGridRange(new Date(2026, 6, 19));
+    expect(dayKey(start)).toBe('2026-06-29');
+    expect(dayKey(end)).toBe('2026-08-03');
+    const days = (end.getTime() - start.getTime()) / 86_400_000;
+    expect(days % 7).toBe(0);
+  });
+
+  it('mês que começa na segunda não ganha semana extra', () => {
+    // Junho/2026 começa numa segunda-feira.
+    const { start, end } = monthGridRange(new Date(2026, 5, 10));
+    expect(dayKey(start)).toBe('2026-06-01');
+    expect(dayKey(end)).toBe('2026-07-06');
   });
 });
 

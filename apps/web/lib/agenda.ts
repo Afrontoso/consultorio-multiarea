@@ -30,6 +30,33 @@ export function addDays(d: Date, n: number): Date {
   return copy;
 }
 
+/** Dia 1 do mês de `d`, 00:00 local. */
+export function startOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+/** Soma `n` meses mantendo o dia 1 (para navegação do calendário mensal). */
+export function addMonths(d: Date, n: number): Date {
+  return new Date(d.getFullYear(), d.getMonth() + n, 1);
+}
+
+/**
+ * Grade do calendário mensal: da segunda-feira da semana do dia 1 até a
+ * segunda seguinte à última semana do mês (múltiplo de 7 dias, 4 a 6 semanas).
+ */
+export function monthGridRange(d: Date): { start: Date; end: Date } {
+  const monthStart = startOfMonth(d);
+  const nextMonth = addMonths(d, 1);
+  const start = startOfWeek(monthStart);
+  const end = addDays(startOfWeek(addDays(nextMonth, -1)), 7);
+  return { start, end };
+}
+
+/** "julho de 2026" (mês local por extenso). */
+export function formatMonthLong(d: Date): string {
+  return d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+}
+
 /** Chave YYYY-MM-DD do dia local. */
 export function dayKey(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, '0');

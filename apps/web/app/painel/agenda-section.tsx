@@ -6,10 +6,14 @@ import type { AppointmentItem, Professional } from '../../lib/painel-types';
 import {
   WEEKDAY_SHORT,
   addDays,
+  addMonths,
   dayKey,
   formatDayLong,
+  formatMonthLong,
   formatTime,
+  monthGridRange,
   startOfDay,
+  startOfMonth,
   startOfWeek,
   toDatetimeLocal,
 } from '../../lib/agenda';
@@ -18,7 +22,12 @@ import { BlocksView } from './blocks-view';
 import { WorkingHoursView } from './working-hours-view';
 
 type SubView = 'calendario' | 'bloqueios' | 'horarios';
-type Mode = 'semana' | 'dia';
+type Mode = 'mes' | 'semana' | 'dia';
+
+const MODE_LABEL: Record<Mode, string> = { mes: 'mês', semana: 'semana', dia: 'dia' };
+
+// Segunda a domingo, na ordem das colunas da grade mensal.
+const WEEK_HEADER = [1, 2, 3, 4, 5, 6, 0].map((i) => WEEKDAY_SHORT[i]!);
 
 const STATUS_LABEL: Record<string, string> = {
   CONFIRMED: 'confirmada',
@@ -88,8 +97,15 @@ function CalendarView({ professionals }: { professionals: Professional[] }) {
   const [showForm, setShowForm] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const from = mode === 'semana' ? startOfWeek(anchor) : anchor;
-  const to = addDays(from, mode === 'semana' ? 7 : 1);
+  const { from, to } =
+    mode === 'mes'
+      ? (() => {
+          const { start, end } = monthGridRange(anchor);
+          return { from: start, to: end };
+        })()
+      : mode === 'semana'
+        ? { from: startOfWeek(anchor), to: addDays(startOfWeek(anchor), 7) }
+        : { from: anchor, to: addDays(anchor, 1) };
 
   useEffect(() => {
     let stale = false;
@@ -110,12 +126,15 @@ function CalendarView({ professionals }: { professionals: Professional[] }) {
   }, [mode, anchor, professionalId, reloadKey]);
 
   const reload = () => setReloadKey((k) => k + 1);
-  const days = Array.from({ length: mode === 'semana' ? 7 : 1 }, (_, i) => addDays(from, i));
+  const dayCount = Math.round((to.getTime() - from.getTime()) / 86_400_000);
+  const days = Array.from({ length: dayCount }, (_, i) => addDays(from, i));
   const todayKey = dayKey(new Date());
+  const anchorMonth = anchor.getMonth();
 
   function navigate(direction: -1 | 1) {
     setItems(null);
-    setAnchor(addDays(anchor, direction * (mode === 'semana' ? 7 : 1)));
+    if (mode === 'mes') setAnchor(addMonths(anchor, direction));
+    else setAnchor(addDays(anchor, direction * (mode === 'semana' ? 7 : 1)));
   }
 
   return (
@@ -138,9 +157,11 @@ function CalendarView({ professionals }: { professionals: Professional[] }) {
             →
           </button>
           <span className="ml-3 font-serif italic text-lg">
-            {mode === 'semana'
-              ? `${from.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} – ${addDays(from, 6).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}`
-              : formatDayLong(from)}
+            {mode === 'mes'
+              ? formatMonthLong(startOfMonth(anchor))
+              : mode === 'semana'
+                ? `${from.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} – ${addDays(from, 6).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}`
+                : formatDayLong(from)}
           </span>
         </div>
 
@@ -161,7 +182,7 @@ function CalendarView({ professionals }: { professionals: Professional[] }) {
             ))}
           </select>
           <div className="flex shrink-0 border border-[color:var(--color-rule)] rounded-full overflow-hidden">
-            {(['semana', 'dia'] as Mode[]).map((m) => (
+            {(['mes', 'semana', 'dia'] as Mode[]).map((m) => (
               <button
                 key={m}
                 onClick={() => {
@@ -174,7 +195,7 @@ function CalendarView({ professionals }: { professionals: Professional[] }) {
                     : 'text-[color:var(--color-ink-soft)]'
                 }`}
               >
-                {m}
+                {MODE_LABEL[m]}
               </button>
             ))}
           </div>
@@ -207,25 +228,43 @@ function CalendarView({ professionals }: { professionals: Professional[] }) {
       ) : (
         <div
           className={`mt-8 grid gap-px bg-[color:var(--color-rule)] border border-[color:var(--color-rule)] ${
-            mode === 'semana' ? 'grid-cols-1 md:grid-cols-7' : 'grid-cols-1'
+            mode === 'mes'
+              ? 'grid-cols-7'
+              : mode === 'semana'
+                ? 'grid-cols-1 md:grid-cols-7'
+                : 'grid-cols-1'
           }`}
         >
+          {mode === 'mes' &&
+            WEEK_HEADER.map((label) => (
+              <p key={label} className="kicker bg-[color:var(--color-paper)] px-1 py-2 md:px-3 text-center md:text-left">
+                {label}
+              </p>
+            ))}
           {days.map((day) => {
             const key = dayKey(day);
+            const outsideMonth = mode === 'mes' && day.getMonth() !== anchorMonth;
             const dayItems = items
               .filter((a) => dayKey(new Date(a.date)) === key)
               .sort((a, b) => a.date.localeCompare(b.date));
             return (
-              <div key={key} className="bg-[color:var(--color-paper)] min-h-28 p-2 md:p-3">
+              <div
+                key={key}
+                className={`bg-[color:var(--color-paper)] ${
+                  mode === 'mes' ? 'min-h-20 md:min-h-24 p-1 md:p-2' : 'min-h-28 p-2 md:p-3'
+                } ${outsideMonth ? 'opacity-40' : ''}`}
+              >
                 <p
                   className={`kicker ${key === todayKey ? 'text-[color:var(--color-clay-deep)]' : ''}`}
                 >
-                  {WEEKDAY_SHORT[day.getDay()]} {day.getDate()}
-                  {key === todayKey && ' · hoje'}
+                  {mode === 'mes' ? day.getDate() : `${WEEKDAY_SHORT[day.getDay()]} ${day.getDate()}`}
+                  {key === todayKey && (mode === 'mes' ? ' ·' : ' · hoje')}
                 </p>
                 <div className="mt-2 space-y-2">
                   {dayItems.length === 0 ? (
-                    <p className="text-xs text-[color:var(--color-ink-soft)] italic">—</p>
+                    mode !== 'mes' && (
+                      <p className="text-xs text-[color:var(--color-ink-soft)] italic">—</p>
+                    )
                   ) : (
                     dayItems.map((a) => (
                       <AppointmentCard key={a.id} appointment={a} onChanged={reload} />
