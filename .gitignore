@@ -42,3 +42,6 @@ coverage/
 # Cache
 .cache/
 .eslintcache
+
+# TypeScript incremental build info (quebra o build em checkout limpo se commitado)
+*.tsbuildinfo
