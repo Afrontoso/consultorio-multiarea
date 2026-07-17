@@ -6,13 +6,21 @@ type PrismaMock = {
   tenant: { findUnique: jest.Mock };
   service: { findMany: jest.Mock };
   professional: { findMany: jest.Mock };
+  withTenant: jest.Mock;
 };
 
 function buildPrismaMock(): PrismaMock {
-  return {
+  const mock = {
     tenant: { findUnique: jest.fn() },
     service: { findMany: jest.fn().mockResolvedValue([]) },
     professional: { findMany: jest.fn().mockResolvedValue([]) },
+  };
+  // withTenant entrega o próprio mock como tx (mesmos jest.Mock por modelo).
+  return {
+    ...mock,
+    withTenant: jest.fn(async (_tenantId: string, fn: (tx: typeof mock) => unknown) =>
+      fn(mock),
+    ),
   };
 }
 

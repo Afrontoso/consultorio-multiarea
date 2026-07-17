@@ -15,55 +15,62 @@ export class AvailabilityService {
       throw new NotFoundException('Consultório não encontrado.');
     }
 
-    const [professional, service] = await Promise.all([
-      this.prisma.professional.findFirst({
-        where: { id: query.professionalId, tenantId: tenant.id },
-        include: { services: { select: { id: true } } },
-      }),
-      this.prisma.service.findFirst({
-        where: { id: query.serviceId, tenantId: tenant.id },
-      }),
-    ]);
-    if (!professional) throw new NotFoundException('Profissional não encontrado.');
-    if (!service) throw new NotFoundException('Serviço não encontrado.');
-    if (!professional.services.some((s) => s.id === service.id)) {
-      throw new BadRequestException('Este profissional não realiza este serviço.');
-    }
+    const { professional, service, ranges, appointments, blocks } =
+      await this.prisma.withTenant(tenant.id, async (tx) => {
+        const prof = await tx.professional.findFirst({
+          where: { id: query.professionalId, tenantId: tenant.id },
+          include: { services: { select: { id: true } } },
+        });
+        if (!prof) throw new NotFoundException('Profissional não encontrado.');
+        const svc = await tx.service.findFirst({
+          where: { id: query.serviceId, tenantId: tenant.id },
+        });
+        if (!svc) throw new NotFoundException('Serviço não encontrado.');
+        if (!prof.services.some((s) => s.id === svc.id)) {
+          throw new BadRequestException('Este profissional não realiza este serviço.');
+        }
+
+        const weekday = weekdayOf(query.date);
+        const workingRanges = await tx.workingHours.findMany({
+          where: { tenantId: tenant.id, professionalId: prof.id, weekday },
+          select: { startMinute: true, endMinute: true },
+        });
+
+        // Janela UTC generosa do dia local (±1 dia cobre qualquer fuso).
+        const [y, m, d] = query.date.split('-').map(Number);
+        const dayStartUtc = new Date(Date.UTC(y!, m! - 1, d!) - DAY_MS);
+        const dayEndUtc = new Date(Date.UTC(y!, m! - 1, d!) + 2 * DAY_MS);
+
+        const appts = await tx.appointment.findMany({
+          where: {
+            tenantId: tenant.id,
+            professionalId: prof.id,
+            status: { notIn: ['CANCELED'] },
+            date: { gte: dayStartUtc, lt: dayEndUtc },
+          },
+          select: { date: true, service: { select: { duration: true } } },
+        });
+        const blks = await tx.scheduleBlock.findMany({
+          where: {
+            tenantId: tenant.id,
+            professionalId: prof.id,
+            startsAt: { lt: dayEndUtc },
+            endsAt: { gt: dayStartUtc },
+          },
+          select: { startsAt: true, endsAt: true },
+        });
+
+        return {
+          professional: prof,
+          service: svc,
+          ranges: workingRanges,
+          appointments: appts,
+          blocks: blks,
+        };
+      });
 
     const settings = (tenant.settings ?? {}) as { utcOffsetMinutes?: number };
     const utcOffsetMinutes = settings.utcOffsetMinutes ?? DEFAULT_UTC_OFFSET_MINUTES;
-
-    const weekday = weekdayOf(query.date);
-    const ranges = await this.prisma.workingHours.findMany({
-      where: { tenantId: tenant.id, professionalId: professional.id, weekday },
-      select: { startMinute: true, endMinute: true },
-    });
-
-    // Janela UTC generosa do dia local (±1 dia cobre qualquer fuso).
-    const [y, m, d] = query.date.split('-').map(Number);
-    const dayStartUtc = new Date(Date.UTC(y!, m! - 1, d!) - DAY_MS);
-    const dayEndUtc = new Date(Date.UTC(y!, m! - 1, d!) + 2 * DAY_MS);
-
-    const [appointments, blocks] = await Promise.all([
-      this.prisma.appointment.findMany({
-        where: {
-          tenantId: tenant.id,
-          professionalId: professional.id,
-          status: { notIn: ['CANCELED'] },
-          date: { gte: dayStartUtc, lt: dayEndUtc },
-        },
-        select: { date: true, service: { select: { duration: true } } },
-      }),
-      this.prisma.scheduleBlock.findMany({
-        where: {
-          tenantId: tenant.id,
-          professionalId: professional.id,
-          startsAt: { lt: dayEndUtc },
-          endsAt: { gt: dayStartUtc },
-        },
-        select: { startsAt: true, endsAt: true },
-      }),
-    ]);
 
     const busy = [
       ...appointments.map((a) => ({

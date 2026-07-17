@@ -10,7 +10,7 @@ import type {
   ListAppointmentsQuery,
   UpdateAppointmentInput,
 } from '@consultorio/contracts';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService, type TenantTx } from '../prisma/prisma.service';
 import { DEFAULT_UTC_OFFSET_MINUTES } from '../availability/slots';
 
 const SELECT = {
@@ -31,85 +31,100 @@ export class AppointmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   list(tenantId: string, query: ListAppointmentsQuery) {
-    return this.prisma.appointment.findMany({
-      where: {
-        tenantId,
-        ...(query.professionalId && { professionalId: query.professionalId }),
-        ...(query.status && { status: query.status }),
-        date: {
-          ...(query.from && { gte: query.from }),
-          ...(query.to && { lt: query.to }),
+    return this.prisma.withTenant(tenantId, (tx) =>
+      tx.appointment.findMany({
+        where: {
+          tenantId,
+          ...(query.professionalId && { professionalId: query.professionalId }),
+          ...(query.status && { status: query.status }),
+          date: {
+            ...(query.from && { gte: query.from }),
+            ...(query.to && { lt: query.to }),
+          },
         },
-      },
-      orderBy: { date: 'asc' },
-      select: SELECT,
-    });
+        orderBy: { date: 'asc' },
+        select: SELECT,
+      }),
+    );
   }
 
-  async create(tenantId: string, input: CreateAppointmentInput) {
-    const [tenant, professional, service] = await Promise.all([
-      this.prisma.tenant.findUniqueOrThrow({
+  create(tenantId: string, input: CreateAppointmentInput) {
+    // Transação única: checagem de limite/conflito e criação são atômicas.
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      const tenant = await tx.tenant.findUniqueOrThrow({
         where: { id: tenantId },
         include: { plan: true },
-      }),
-      this.prisma.professional.findFirst({
+      });
+      const professional = await tx.professional.findFirst({
         where: { id: input.professionalId, tenantId },
-      }),
-      this.prisma.service.findFirst({ where: { id: input.serviceId, tenantId } }),
-    ]);
-    if (!professional) throw new NotFoundException('Profissional não encontrado.');
-    if (!service) throw new NotFoundException('Serviço não encontrado.');
+      });
+      if (!professional) throw new NotFoundException('Profissional não encontrado.');
+      const service = await tx.service.findFirst({
+        where: { id: input.serviceId, tenantId },
+      });
+      if (!service) throw new NotFoundException('Serviço não encontrado.');
 
-    await this.ensureMonthlyLimit(tenantId, tenant.plan, input.date);
-    await this.ensureNoConflict(tenantId, input.professionalId, input.date, service.duration);
-
-    const patientId = await this.resolvePatient(tenantId, input);
-
-    return this.prisma.appointment.create({
-      data: {
+      await this.ensureMonthlyLimit(tx, tenantId, tenant.plan, input.date);
+      await this.ensureNoConflict(
+        tx,
         tenantId,
-        date: input.date,
-        professionalId: input.professionalId,
-        serviceId: input.serviceId,
-        patientId,
-        notes: input.notes,
-        recurrence: input.recurrence,
-        status: 'CONFIRMED',
-      },
-      select: SELECT,
+        input.professionalId,
+        input.date,
+        service.duration,
+      );
+
+      const patientId = await this.resolvePatient(tx, tenantId, input);
+
+      return tx.appointment.create({
+        data: {
+          tenantId,
+          date: input.date,
+          professionalId: input.professionalId,
+          serviceId: input.serviceId,
+          patientId,
+          notes: input.notes,
+          recurrence: input.recurrence,
+          status: 'CONFIRMED',
+        },
+        select: SELECT,
+      });
     });
   }
 
-  async update(tenantId: string, id: string, input: UpdateAppointmentInput) {
-    const existing = await this.prisma.appointment.findFirst({
-      where: { id, tenantId },
-      include: { service: { select: { duration: true } } },
-    });
-    if (!existing) throw new NotFoundException('Agendamento não encontrado.');
+  update(tenantId: string, id: string, input: UpdateAppointmentInput) {
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      const existing = await tx.appointment.findFirst({
+        where: { id, tenantId },
+        include: { service: { select: { duration: true } } },
+      });
+      if (!existing) throw new NotFoundException('Agendamento não encontrado.');
 
-    if (input.date && input.date.getTime() !== existing.date.getTime()) {
-      await this.ensureNoConflict(
-        tenantId,
-        existing.professionalId,
-        input.date,
-        existing.service.duration,
-        id,
-      );
-    }
+      if (input.date && input.date.getTime() !== existing.date.getTime()) {
+        await this.ensureNoConflict(
+          tx,
+          tenantId,
+          existing.professionalId,
+          input.date,
+          existing.service.duration,
+          id,
+        );
+      }
 
-    return this.prisma.appointment.update({
-      where: { id },
-      data: {
-        ...(input.date && { date: input.date }),
-        ...(input.status && { status: input.status }),
-        ...(input.notes !== undefined && { notes: input.notes }),
-      },
-      select: SELECT,
+      return tx.appointment.update({
+        where: { id },
+        data: {
+          ...(input.date && { date: input.date }),
+          ...(input.status && { status: input.status }),
+          ...(input.notes !== undefined && { notes: input.notes }),
+        },
+        select: SELECT,
+      });
     });
   }
 
   /** Conflito com agendamentos ativos e bloqueios do profissional. */
   private async ensureNoConflict(
+    tx: TenantTx,
     tenantId: string,
     professionalId: string,
     start: Date,
@@ -119,27 +134,25 @@ export class AppointmentsService {
     const end = new Date(start.getTime() + durationMinutes * 60_000);
     const windowStart = new Date(start.getTime() - MAX_SERVICE_MINUTES * 60_000);
 
-    const [appointments, blocks] = await Promise.all([
-      this.prisma.appointment.findMany({
-        where: {
-          tenantId,
-          professionalId,
-          status: { notIn: ['CANCELED'] },
-          date: { gte: windowStart, lt: end },
-          ...(ignoreAppointmentId && { id: { not: ignoreAppointmentId } }),
-        },
-        select: { date: true, service: { select: { duration: true } } },
-      }),
-      this.prisma.scheduleBlock.findMany({
-        where: {
-          tenantId,
-          professionalId,
-          startsAt: { lt: end },
-          endsAt: { gt: start },
-        },
-        select: { id: true },
-      }),
-    ]);
+    const appointments = await tx.appointment.findMany({
+      where: {
+        tenantId,
+        professionalId,
+        status: { notIn: ['CANCELED'] },
+        date: { gte: windowStart, lt: end },
+        ...(ignoreAppointmentId && { id: { not: ignoreAppointmentId } }),
+      },
+      select: { date: true, service: { select: { duration: true } } },
+    });
+    const blocks = await tx.scheduleBlock.findMany({
+      where: {
+        tenantId,
+        professionalId,
+        startsAt: { lt: end },
+        endsAt: { gt: start },
+      },
+      select: { id: true },
+    });
 
     const hasAppointmentConflict = appointments.some((a) => {
       const aEnd = new Date(a.date.getTime() + a.service.duration * 60_000);
@@ -155,6 +168,7 @@ export class AppointmentsService {
 
   /** Limite do plano por mês-calendário no fuso do consultório. */
   private async ensureMonthlyLimit(
+    tx: TenantTx,
     tenantId: string,
     plan: { code: string; maxAppointmentsPerMonth: number },
     date: Date,
@@ -168,7 +182,7 @@ export class AppointmentsService {
       Date.UTC(local.getUTCFullYear(), local.getUTCMonth() + 1, 1) - offsetMs,
     );
 
-    const count = await this.prisma.appointment.count({
+    const count = await tx.appointment.count({
       where: {
         tenantId,
         status: { notIn: ['CANCELED'] },
@@ -183,9 +197,9 @@ export class AppointmentsService {
   }
 
   /** patientId existente ou upsert do paciente inline pelo telefone. */
-  private async resolvePatient(tenantId: string, input: CreateAppointmentInput) {
+  private async resolvePatient(tx: TenantTx, tenantId: string, input: CreateAppointmentInput) {
     if (input.patientId) {
-      const patient = await this.prisma.patient.findFirst({
+      const patient = await tx.patient.findFirst({
         where: { id: input.patientId, tenantId },
       });
       if (!patient) throw new NotFoundException('Paciente não encontrado.');
@@ -194,7 +208,7 @@ export class AppointmentsService {
     if (!input.patient) {
       throw new BadRequestException('Informe patientId ou os dados do paciente.');
     }
-    const patient = await this.prisma.patient.upsert({
+    const patient = await tx.patient.upsert({
       where: { tenantId_phone: { tenantId, phone: input.patient.phone } },
       // Agendar de novo reativa ficha soft-deletada (consentimento renovado).
       update: { name: input.patient.name, email: input.patient.email, deletedAt: null },

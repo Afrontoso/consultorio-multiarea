@@ -8,7 +8,8 @@
     "start": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "test:rls": "TS_NODE_SKIP_PROJECT=true TS_NODE_COMPILER_OPTIONS='{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' node --env-file=.env -r ts-node/register/transpile-only test/rls-isolation.ts"
   },
   "dependencies": {
     "@consultorio/contracts": "workspace:*",

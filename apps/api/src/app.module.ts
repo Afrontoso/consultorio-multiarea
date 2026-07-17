@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { TenantScopeInterceptor } from './common/interceptors/tenant-scope.interceptor';
 import { validateEnv } from './config/env';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { AvailabilityModule } from './modules/availability/availability.module';
@@ -30,5 +32,6 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     PatientsModule,
   ],
   controllers: [HealthController],
+  providers: [{ provide: APP_INTERCEPTOR, useClass: TenantScopeInterceptor }],
 })
 export class AppModule {}

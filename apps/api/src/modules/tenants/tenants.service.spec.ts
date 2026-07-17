@@ -5,7 +5,7 @@ import { TenantsService } from './tenants.service';
 type TxMock = {
   tenant: { create: jest.Mock };
   user: { create: jest.Mock };
-  $executeRawUnsafe: jest.Mock;
+  $queryRaw: jest.Mock;
 };
 
 type PrismaMock = {
@@ -20,7 +20,7 @@ function buildPrismaMock(): PrismaMock {
   const tx: TxMock = {
     tenant: { create: jest.fn() },
     user: { create: jest.fn() },
-    $executeRawUnsafe: jest.fn().mockResolvedValue(undefined),
+    $queryRaw: jest.fn().mockResolvedValue(undefined),
   };
   return {
     plan: { findUnique: jest.fn() },
@@ -98,8 +98,9 @@ describe('TenantsService.createTenant', () => {
         trialEndsAt: expect.any(Date),
       }),
     });
-    expect(prisma.tx.$executeRawUnsafe).toHaveBeenCalledWith(
-      `SET LOCAL app.tenant_id = 'tenant-1'`,
+    expect(prisma.tx.$queryRaw).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.stringContaining('set_config')]),
+      'tenant-1',
     );
     expect(prisma.tx.user.create).toHaveBeenCalledWith({
       data: {

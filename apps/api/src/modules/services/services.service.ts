@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { CreateServiceInput, UpdateServiceInput } from '@consultorio/contracts';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService, type TenantTx } from '../prisma/prisma.service';
 
 const SELECT = {
   id: true,
@@ -30,64 +30,76 @@ export class ServicesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async list(tenantId: string): Promise<ServiceDto[]> {
-    const services = await this.prisma.service.findMany({
-      where: { tenantId },
-      orderBy: { name: 'asc' },
-      select: SELECT,
-    });
+    const services = await this.prisma.withTenant(tenantId, (tx) =>
+      tx.service.findMany({
+        where: { tenantId },
+        orderBy: { name: 'asc' },
+        select: SELECT,
+      }),
+    );
     return services.map(toDto);
   }
 
   async create(tenantId: string, input: CreateServiceInput): Promise<ServiceDto> {
-    const { professionalIds, ...data } = input;
-    const created = await this.prisma.service.create({
-      data: {
-        ...data,
-        tenantId,
-        professionals: { connect: await this.ownProfessionalIds(tenantId, professionalIds) },
-      },
-      select: SELECT,
+    const created = await this.prisma.withTenant(tenantId, async (tx) => {
+      const { professionalIds, ...data } = input;
+      return tx.service.create({
+        data: {
+          ...data,
+          tenantId,
+          professionals: {
+            connect: await this.ownProfessionalIds(tx, tenantId, professionalIds),
+          },
+        },
+        select: SELECT,
+      });
     });
     return toDto(created);
   }
 
   async update(tenantId: string, id: string, input: UpdateServiceInput): Promise<ServiceDto> {
-    await this.ensureExists(tenantId, id);
-    const { professionalIds, ...data } = input;
-    const updated = await this.prisma.service.update({
-      where: { id },
-      data: {
-        ...data,
-        ...(professionalIds !== undefined && {
-          professionals: { set: await this.ownProfessionalIds(tenantId, professionalIds) },
-        }),
-      },
-      select: SELECT,
+    const updated = await this.prisma.withTenant(tenantId, async (tx) => {
+      await this.ensureExists(tx, tenantId, id);
+      const { professionalIds, ...data } = input;
+      return tx.service.update({
+        where: { id },
+        data: {
+          ...data,
+          ...(professionalIds !== undefined && {
+            professionals: {
+              set: await this.ownProfessionalIds(tx, tenantId, professionalIds),
+            },
+          }),
+        },
+        select: SELECT,
+      });
     });
     return toDto(updated);
   }
 
-  async remove(tenantId: string, id: string) {
-    await this.ensureExists(tenantId, id);
-    const appointments = await this.prisma.appointment.count({
-      where: { tenantId, serviceId: id },
+  remove(tenantId: string, id: string) {
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      await this.ensureExists(tx, tenantId, id);
+      const appointments = await tx.appointment.count({
+        where: { tenantId, serviceId: id },
+      });
+      if (appointments > 0) {
+        throw new ConflictException('Este serviço tem agendamentos e não pode ser excluído.');
+      }
+      await tx.service.delete({ where: { id } });
+      return { deleted: true };
     });
-    if (appointments > 0) {
-      throw new ConflictException('Este serviço tem agendamentos e não pode ser excluído.');
-    }
-    await this.prisma.service.delete({ where: { id } });
-    return { deleted: true };
   }
 
-  private async ensureExists(tenantId: string, id: string) {
-    const found = await this.prisma.service.findFirst({ where: { id, tenantId } });
+  private async ensureExists(tx: TenantTx, tenantId: string, id: string) {
+    const found = await tx.service.findFirst({ where: { id, tenantId } });
     if (!found) throw new NotFoundException('Serviço não encontrado.');
   }
 
   /** Only connect professionals that belong to the same tenant. */
-  private async ownProfessionalIds(tenantId: string, professionalIds: string[]) {
+  private async ownProfessionalIds(tx: TenantTx, tenantId: string, professionalIds: string[]) {
     if (professionalIds.length === 0) return [];
-    return this.prisma.professional.findMany({
+    return tx.professional.findMany({
       where: { tenantId, id: { in: professionalIds } },
       select: { id: true },
     });

@@ -15,18 +15,18 @@ export class BookingService {
   async profile(slug: string) {
     const tenant = await this.activeTenant(slug);
 
-    const [professionals, services] = await Promise.all([
-      this.prisma.professional.findMany({
+    const [professionals, services] = await this.prisma.withTenant(tenant.id, async (tx) => [
+      await tx.professional.findMany({
         where: { tenantId: tenant.id },
         orderBy: { name: 'asc' },
         select: { id: true, name: true, bio: true, photoUrl: true, color: true },
       }),
-      this.prisma.service.findMany({
+      await tx.service.findMany({
         where: { tenantId: tenant.id },
         orderBy: { name: 'asc' },
         select: { id: true, name: true, description: true, duration: true, price: true },
       }),
-    ]);
+    ] as const);
 
     return {
       tenant: { slug: tenant.slug, name: tenant.name, category: tenant.category },
@@ -40,21 +40,23 @@ export class BookingService {
     const tenant = await this.activeTenant(slug);
     const settings = (tenant.settings ?? {}) as { utcOffsetMinutes?: number };
 
-    const services = await this.prisma.service.findMany({
-      where: { tenantId: tenant.id, professionals: { some: {} } },
-      orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        duration: true,
-        price: true,
-        professionals: {
-          select: { id: true, name: true, bio: true, photoUrl: true, color: true },
-          orderBy: { name: 'asc' },
+    const services = await this.prisma.withTenant(tenant.id, (tx) =>
+      tx.service.findMany({
+        where: { tenantId: tenant.id, professionals: { some: {} } },
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          duration: true,
+          price: true,
+          professionals: {
+            select: { id: true, name: true, bio: true, photoUrl: true, color: true },
+            orderBy: { name: 'asc' },
+          },
         },
-      },
-    });
+      }),
+    );
 
     return {
       tenant: {

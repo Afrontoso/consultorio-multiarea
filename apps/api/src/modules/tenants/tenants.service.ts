@@ -40,7 +40,7 @@ export class TenantsService {
         },
       });
 
-      await tx.$executeRawUnsafe(`SET LOCAL app.tenant_id = '${tenant.id}'`);
+      await tx.$queryRaw`SELECT set_config('app.tenant_id', ${tenant.id}, true)`;
 
       await tx.user.create({
         data: {

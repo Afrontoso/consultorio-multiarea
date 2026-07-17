@@ -1,17 +1,41 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
-import type { Request } from 'express';
 import { Observable } from 'rxjs';
+import { PrismaService } from '../../modules/prisma/prisma.service';
+import { TenantContext } from '../tenant-context';
+import type { MemberRequest } from '../guards/tenant-member.guard';
 
 /**
- * Placeholder interceptor. Once Prisma is wired, this resolves the tenant from the
- * X-Tenant-Slug header (or falls back to the authed firebaseUid lookup) and sets
- * `SET LOCAL app.tenant_id` inside a Prisma transaction so RLS policies apply.
+ * Popula o TenantContext (AsyncLocalStorage) do request autenticado:
+ * usa o membro resolvido pelo TenantMemberGuard ou, na falta dele, faz
+ * lookup por firebaseUid. Rotas públicas seguem sem contexto — o service
+ * resolve o tenant pelo slug e abre `withTenant` explicitamente.
  */
 @Injectable()
 export class TenantScopeInterceptor implements NestInterceptor {
-  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    const req = context.switchToHttp().getRequest<Request>();
-    void req.headers['x-tenant-slug'];
-    return next.handle();
+  constructor(private readonly prisma: PrismaService) {}
+
+  async intercept(
+    context: ExecutionContext,
+    next: CallHandler,
+  ): Promise<Observable<unknown>> {
+    const req = context.switchToHttp().getRequest<MemberRequest>();
+
+    let tenantId = req.member?.tenantId;
+    if (!tenantId && req.user) {
+      const user = await this.prisma.user.findUnique({
+        where: { firebaseUid: req.user.uid },
+        select: { tenantId: true },
+      });
+      tenantId = user?.tenantId;
+    }
+    if (!tenantId) return next.handle();
+
+    const scoped = tenantId;
+    return new Observable((subscriber) => {
+      const subscription = TenantContext.run(scoped, () =>
+        next.handle().subscribe(subscriber),
+      );
+      return () => subscription.unsubscribe();
+    });
   }
 }
