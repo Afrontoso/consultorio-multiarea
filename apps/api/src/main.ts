@@ -8,6 +8,9 @@ async function bootstrap() {
   const env = validateEnv(process.env);
 
   const app = await NestFactory.create(AppModule);
+  // Solta a porta e fecha o Prisma (onModuleDestroy) em SIGTERM/SIGINT —
+  // sem isso o `nest --watch` recompila e o processo novo morre com EADDRINUSE.
+  app.enableShutdownHooks();
   app.use(helmet());
   app.enableCors({
     origin: corsOrigins(env),
