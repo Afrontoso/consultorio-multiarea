@@ -1,11 +1,12 @@
 import { headers } from 'next/headers';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { formatBRL } from '../../../lib/money';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3333/v1';
 
 interface PublicProfile {
-  tenant: { slug: string; name: string; category: string };
+  tenant: { slug: string; name: string; category: string; watermark?: boolean };
   professionals: {
     id: string;
     name: string;
@@ -154,6 +155,19 @@ export default async function TenantHomePage() {
           </div>
         </div>
       </section>
+
+      {tenant.watermark && (
+        <footer className="border-t border-[color:var(--color-rule)]">
+          <div className="mx-auto max-w-[1100px] px-6 md:px-10 py-6 text-center">
+            <Link
+              href="/"
+              className="text-xs tracking-wide text-[color:var(--color-ink-soft)] hover:text-[color:var(--color-ink)]"
+            >
+              feito com <span className="font-serif italic">Consultório</span>
+            </Link>
+          </div>
+        </footer>
+      )}
     </main>
   );
 }

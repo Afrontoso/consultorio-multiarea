@@ -19,6 +19,11 @@ import { AppointmentsService } from './appointments.service';
 export class AppointmentsController {
   constructor(private readonly appointments: AppointmentsService) {}
 
+  @Get('usage')
+  usage(@CurrentMember() member: TenantMember) {
+    return this.appointments.usage(member.tenantId);
+  }
+
   @Get()
   list(
     @Query(new ZodValidationPipe(ListAppointmentsQuerySchema)) query: ListAppointmentsQuery,

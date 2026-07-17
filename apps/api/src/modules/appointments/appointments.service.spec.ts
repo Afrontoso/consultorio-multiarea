@@ -1,5 +1,5 @@
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { AppointmentsService } from './appointments.service';
+import { AppointmentsService, monthWindowUtc } from './appointments.service';
 
 type PrismaMock = {
   tenant: { findUniqueOrThrow: jest.Mock };
@@ -58,6 +58,15 @@ function happyPathMocks(prisma: PrismaMock) {
   prisma.patient.upsert.mockResolvedValue({ id: 'pat-1' });
   prisma.appointment.create.mockResolvedValue({ id: 'apt-1' });
 }
+
+describe('monthWindowUtc', () => {
+  it('vira o mês no fuso do consultório (UTC-3), não em UTC', () => {
+    // 2026-08-01T02:30Z ainda é 31 de julho 23:30 no fuso -180.
+    const { monthStart, monthEnd } = monthWindowUtc(new Date('2026-08-01T02:30:00Z'), -180);
+    expect(monthStart.toISOString()).toBe('2026-07-01T03:00:00.000Z');
+    expect(monthEnd.toISOString()).toBe('2026-08-01T03:00:00.000Z');
+  });
+});
 
 describe('AppointmentsService', () => {
   let prisma: PrismaMock;
@@ -199,6 +208,28 @@ describe('AppointmentsService', () => {
       await expect(
         service.update('t-1', 'apt-alheio', { status: 'CANCELED' }),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('usage', () => {
+    it('retorna uso do mês corrente com plano e limite', async () => {
+      prisma.tenant.findUniqueOrThrow.mockResolvedValue({
+        id: 't-1',
+        plan: { code: 'FREE', maxAppointmentsPerMonth: 30 },
+      });
+      prisma.appointment.count.mockResolvedValue(25);
+
+      const result = await service.usage('t-1');
+
+      expect(result).toEqual({ planCode: 'FREE', used: 25, limit: 30 });
+      expect(prisma.appointment.count).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenantId: 't-1',
+            status: { notIn: ['CANCELED'] },
+          }),
+        }),
+      );
     });
   });
 });

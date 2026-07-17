@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { api, ApiError } from '../../../../lib/api';
 import { formatBRL } from '../../../../lib/money';
 import { formatPhoneBR, phoneDigits } from '../../../../lib/phone';
@@ -23,7 +24,13 @@ interface BookingService {
 }
 
 interface Catalog {
-  tenant: { slug: string; name: string; category: string; utcOffsetMinutes: number };
+  tenant: {
+    slug: string;
+    name: string;
+    category: string;
+    utcOffsetMinutes: number;
+    watermark?: boolean;
+  };
   services: BookingService[];
 }
 
@@ -256,6 +263,7 @@ export function BookingFlow({ slug }: { slug: string }) {
         <a href={`/c/${slug}`} className="btn-ghost mt-8 inline-flex">
           ← Voltar à página do consultório
         </a>
+        <Watermark show={catalog.tenant.watermark} />
       </div>
     );
   }
@@ -495,7 +503,24 @@ export function BookingFlow({ slug }: { slug: string }) {
           </button>
         </div>
       )}
+
+      <Watermark show={catalog.tenant.watermark} />
     </div>
+  );
+}
+
+/** Marca do plano FREE na página pública (featuresJson.watermark). */
+function Watermark({ show }: { show?: boolean }) {
+  if (!show) return null;
+  return (
+    <p className="mt-14 pt-6 border-t border-[color:var(--color-rule)] text-center">
+      <Link
+        href="/"
+        className="text-xs tracking-wide text-[color:var(--color-ink-soft)] hover:text-[color:var(--color-ink)]"
+      >
+        feito com <span className="font-serif italic">Consultório</span>
+      </Link>
+    </p>
   );
 }
 

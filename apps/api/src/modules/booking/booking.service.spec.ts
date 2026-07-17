@@ -61,9 +61,21 @@ describe('BookingService', () => {
         slug: 'clinica-exemplo',
         name: 'Clínica Exemplo',
         category: 'PSICOLOGIA',
+        watermark: false,
       });
       expect(result.professionals).toHaveLength(1);
       expect(result.services[0]!.price).toBe(180);
+    });
+
+    it('marca watermark quando o plano tem featuresJson.watermark (FREE)', async () => {
+      prisma.tenant.findUnique.mockResolvedValue({
+        ...activeTenant,
+        plan: { code: 'FREE', featuresJson: { watermark: true } },
+      });
+
+      const result = await service.profile('clinica-exemplo');
+
+      expect(result.tenant.watermark).toBe(true);
     });
 
     it('404 para slug inexistente', async () => {
@@ -100,6 +112,7 @@ describe('BookingService', () => {
         name: 'Clínica Exemplo',
         category: 'PSICOLOGIA',
         utcOffsetMinutes: DEFAULT_UTC_OFFSET_MINUTES,
+        watermark: false,
       });
       expect(result.services[0]!.price).toBe(180);
     });

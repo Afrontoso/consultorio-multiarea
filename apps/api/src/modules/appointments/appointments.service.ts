@@ -26,6 +26,22 @@ const SELECT = {
 // Janela de busca para checagem de conflito (maior duração possível de serviço).
 const MAX_SERVICE_MINUTES = 480;
 
+/** Janela UTC do mês-calendário que contém `date` no fuso do consultório. */
+export function monthWindowUtc(
+  date: Date,
+  utcOffsetMinutes: number,
+): { monthStart: Date; monthEnd: Date } {
+  const offsetMs = utcOffsetMinutes * 60_000;
+  const local = new Date(date.getTime() + offsetMs);
+  const monthStart = new Date(
+    Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), 1) - offsetMs,
+  );
+  const monthEnd = new Date(
+    Date.UTC(local.getUTCFullYear(), local.getUTCMonth() + 1, 1) - offsetMs,
+  );
+  return { monthStart, monthEnd };
+}
+
 @Injectable()
 export class AppointmentsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -46,6 +62,32 @@ export class AppointmentsService {
         select: SELECT,
       }),
     );
+  }
+
+  /** Uso do plano no mês corrente (para o aviso de limite no painel). */
+  usage(tenantId: string) {
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      const tenant = await tx.tenant.findUniqueOrThrow({
+        where: { id: tenantId },
+        include: { plan: true },
+      });
+      const { monthStart, monthEnd } = monthWindowUtc(
+        new Date(),
+        DEFAULT_UTC_OFFSET_MINUTES,
+      );
+      const used = await tx.appointment.count({
+        where: {
+          tenantId,
+          status: { notIn: ['CANCELED'] },
+          date: { gte: monthStart, lt: monthEnd },
+        },
+      });
+      return {
+        planCode: tenant.plan.code,
+        used,
+        limit: tenant.plan.maxAppointmentsPerMonth,
+      };
+    });
   }
 
   create(tenantId: string, input: CreateAppointmentInput) {
@@ -173,14 +215,7 @@ export class AppointmentsService {
     plan: { code: string; maxAppointmentsPerMonth: number },
     date: Date,
   ) {
-    const offsetMs = DEFAULT_UTC_OFFSET_MINUTES * 60_000;
-    const local = new Date(date.getTime() + offsetMs);
-    const monthStart = new Date(
-      Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), 1) - offsetMs,
-    );
-    const monthEnd = new Date(
-      Date.UTC(local.getUTCFullYear(), local.getUTCMonth() + 1, 1) - offsetMs,
-    );
+    const { monthStart, monthEnd } = monthWindowUtc(date, DEFAULT_UTC_OFFSET_MINUTES);
 
     const count = await tx.appointment.count({
       where: {

@@ -29,7 +29,12 @@ export class BookingService {
     ] as const);
 
     return {
-      tenant: { slug: tenant.slug, name: tenant.name, category: tenant.category },
+      tenant: {
+        slug: tenant.slug,
+        name: tenant.name,
+        category: tenant.category,
+        watermark: this.watermark(tenant),
+      },
       professionals,
       services: services.map((s) => ({ ...s, price: Number(s.price) })),
     };
@@ -64,6 +69,7 @@ export class BookingService {
         name: tenant.name,
         category: tenant.category,
         utcOffsetMinutes: settings.utcOffsetMinutes ?? DEFAULT_UTC_OFFSET_MINUTES,
+        watermark: this.watermark(tenant),
       },
       services: services.map((s) => ({ ...s, price: Number(s.price) })),
     };
@@ -76,10 +82,19 @@ export class BookingService {
   }
 
   private async activeTenant(slug: string) {
-    const tenant = await this.prisma.tenant.findUnique({ where: { slug } });
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug },
+      include: { plan: true },
+    });
     if (!tenant || tenant.status === 'SUSPENDED' || tenant.status === 'CANCELED') {
       throw new NotFoundException('Consultório não encontrado.');
     }
     return tenant;
+  }
+
+  /** Plano FREE exibe a marca "feito com Consultório" na página pública. */
+  private watermark(tenant: { plan?: { featuresJson?: unknown } | null }): boolean {
+    const features = (tenant.plan?.featuresJson ?? {}) as { watermark?: boolean };
+    return features.watermark === true;
   }
 }

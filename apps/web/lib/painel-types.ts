@@ -11,6 +11,12 @@ export interface Me {
   };
 }
 
+export interface PlanUsage {
+  planCode: string;
+  used: number;
+  limit: number;
+}
+
 export interface Professional {
   id: string;
   name: string;
