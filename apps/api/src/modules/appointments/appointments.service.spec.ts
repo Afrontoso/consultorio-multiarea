@@ -5,7 +5,7 @@ type PrismaMock = {
   tenant: { findUniqueOrThrow: jest.Mock };
   professional: { findFirst: jest.Mock };
   service: { findFirst: jest.Mock };
-  patient: { findFirst: jest.Mock; upsert: jest.Mock };
+  patient: { findFirst: jest.Mock; findUniqueOrThrow: jest.Mock; upsert: jest.Mock };
   appointment: {
     findMany: jest.Mock;
     findFirst: jest.Mock;
@@ -22,7 +22,7 @@ function buildPrismaMock(): PrismaMock {
     tenant: { findUniqueOrThrow: jest.fn() },
     professional: { findFirst: jest.fn() },
     service: { findFirst: jest.fn() },
-    patient: { findFirst: jest.fn(), upsert: jest.fn() },
+    patient: { findFirst: jest.fn(), findUniqueOrThrow: jest.fn(), upsert: jest.fn() },
     appointment: {
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn(),
@@ -51,11 +51,22 @@ const baseInput = {
 function happyPathMocks(prisma: PrismaMock) {
   prisma.tenant.findUniqueOrThrow.mockResolvedValue({
     id: 't-1',
+    name: 'Clínica Teste',
+    settings: null,
     plan: { code: 'FREE', maxAppointmentsPerMonth: 30 },
   });
-  prisma.professional.findFirst.mockResolvedValue({ id: 'prof-1' });
-  prisma.service.findFirst.mockResolvedValue({ id: 'svc-1', duration: 60 });
+  prisma.professional.findFirst.mockResolvedValue({
+    id: 'prof-1',
+    name: 'Ana',
+    email: 'ana@example.com',
+  });
+  prisma.service.findFirst.mockResolvedValue({ id: 'svc-1', name: 'Sessão', duration: 60 });
   prisma.patient.upsert.mockResolvedValue({ id: 'pat-1' });
+  prisma.patient.findUniqueOrThrow.mockResolvedValue({
+    id: 'pat-1',
+    name: 'Paciente Teste',
+    email: 'paciente@example.com',
+  });
   prisma.appointment.create.mockResolvedValue({ id: 'apt-1' });
 }
 
@@ -70,12 +81,14 @@ describe('monthWindowUtc', () => {
 
 describe('AppointmentsService', () => {
   let prisma: PrismaMock;
+  let notifications: { appointmentConfirmed: jest.Mock; appointmentCanceled: jest.Mock };
   let service: AppointmentsService;
 
   beforeEach(() => {
     prisma = buildPrismaMock();
+    notifications = { appointmentConfirmed: jest.fn(), appointmentCanceled: jest.fn() };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    service = new AppointmentsService(prisma as any);
+    service = new AppointmentsService(prisma as any, notifications as any);
   });
 
   describe('create', () => {
@@ -96,6 +109,20 @@ describe('AppointmentsService', () => {
             patientId: 'pat-1',
             status: 'CONFIRMED',
           }),
+        }),
+      );
+    });
+
+    it('dispara email de confirmação após criar', async () => {
+      happyPathMocks(prisma);
+
+      await service.create('t-1', baseInput);
+
+      expect(notifications.appointmentConfirmed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantName: 'Clínica Teste',
+          patientEmail: 'paciente@example.com',
+          professionalEmail: 'ana@example.com',
         }),
       );
     });
@@ -171,13 +198,19 @@ describe('AppointmentsService', () => {
   });
 
   describe('update', () => {
+    const existingAppointment = {
+      id: 'apt-1',
+      date: new Date('2026-07-13T12:00:00Z'),
+      status: 'CONFIRMED',
+      professionalId: 'prof-1',
+      tenant: { name: 'Clínica Teste', settings: null },
+      service: { name: 'Sessão', duration: 60 },
+      professional: { name: 'Ana' },
+      patient: { name: 'Paciente Teste', email: 'paciente@example.com' },
+    };
+
     it('remarcar revalida conflito ignorando o próprio agendamento', async () => {
-      prisma.appointment.findFirst.mockResolvedValue({
-        id: 'apt-1',
-        date: new Date('2026-07-13T12:00:00Z'),
-        professionalId: 'prof-1',
-        service: { duration: 60 },
-      });
+      prisma.appointment.findFirst.mockResolvedValue(existingAppointment);
       prisma.appointment.update.mockResolvedValue({ id: 'apt-1' });
 
       await service.update('t-1', 'apt-1', { date: new Date('2026-07-13T15:00:00Z') });
@@ -190,17 +223,35 @@ describe('AppointmentsService', () => {
     });
 
     it('mudança só de status não roda checagem de conflito', async () => {
-      prisma.appointment.findFirst.mockResolvedValue({
-        id: 'apt-1',
-        date: new Date('2026-07-13T12:00:00Z'),
-        professionalId: 'prof-1',
-        service: { duration: 60 },
-      });
+      prisma.appointment.findFirst.mockResolvedValue(existingAppointment);
       prisma.appointment.update.mockResolvedValue({ id: 'apt-1' });
 
       await service.update('t-1', 'apt-1', { status: 'CANCELED' });
 
       expect(prisma.appointment.findMany).not.toHaveBeenCalled();
+    });
+
+    it('cancelamento dispara email para o paciente', async () => {
+      prisma.appointment.findFirst.mockResolvedValue(existingAppointment);
+      prisma.appointment.update.mockResolvedValue({ id: 'apt-1' });
+
+      await service.update('t-1', 'apt-1', { status: 'CANCELED' });
+
+      expect(notifications.appointmentCanceled).toHaveBeenCalledWith(
+        expect.objectContaining({ patientEmail: 'paciente@example.com' }),
+      );
+    });
+
+    it('cancelamento de agendamento já cancelado não dispara email de novo', async () => {
+      prisma.appointment.findFirst.mockResolvedValue({
+        ...existingAppointment,
+        status: 'CANCELED',
+      });
+      prisma.appointment.update.mockResolvedValue({ id: 'apt-1' });
+
+      await service.update('t-1', 'apt-1', { status: 'CANCELED' });
+
+      expect(notifications.appointmentCanceled).not.toHaveBeenCalled();
     });
 
     it('agendamento de outro tenant é 404', async () => {

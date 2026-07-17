@@ -18,6 +18,7 @@ const EnvSchema = z
     FIREBASE_PRIVATE_KEY: z.string().optional(),
     REDIS_URL: z.string().optional(),
     RESEND_API_KEY: z.string().optional(),
+    EMAIL_FROM: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     const firebase = [env.FIREBASE_PROJECT_ID, env.FIREBASE_CLIENT_EMAIL, env.FIREBASE_PRIVATE_KEY];

@@ -10,6 +10,7 @@ import { BookingModule } from './modules/booking/booking.module';
 import { FirebaseModule } from './modules/firebase/firebase.module';
 import { HealthController } from './modules/health/health.controller';
 import { MeModule } from './modules/me/me.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { PatientsModule } from './modules/patients/patients.module';
 import { PrismaModule } from './modules/prisma/prisma.module';
 import { ProfessionalsModule } from './modules/professionals/professionals.module';
@@ -22,6 +23,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     ThrottlerModule.forRoot([{ name: 'public', ttl: 60_000, limit: 30 }]),
     PrismaModule,
     FirebaseModule,
+    NotificationsModule,
     TenantsModule,
     MeModule,
     ProfessionalsModule,

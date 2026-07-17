@@ -12,6 +12,10 @@ import type {
 } from '@consultorio/contracts';
 import { PrismaService, type TenantTx } from '../prisma/prisma.service';
 import { DEFAULT_UTC_OFFSET_MINUTES } from '../availability/slots';
+import {
+  NotificationsService,
+  type AppointmentEmailContext,
+} from '../notifications/notifications.service';
 
 const SELECT = {
   id: true,
@@ -44,7 +48,10 @@ export function monthWindowUtc(
 
 @Injectable()
 export class AppointmentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   list(tenantId: string, query: ListAppointmentsQuery) {
     return this.prisma.withTenant(tenantId, (tx) =>
@@ -90,9 +97,9 @@ export class AppointmentsService {
     });
   }
 
-  create(tenantId: string, input: CreateAppointmentInput) {
+  async create(tenantId: string, input: CreateAppointmentInput) {
     // Transação única: checagem de limite/conflito e criação são atômicas.
-    return this.prisma.withTenant(tenantId, async (tx) => {
+    const { appointment, emailCtx } = await this.prisma.withTenant(tenantId, async (tx) => {
       const tenant = await tx.tenant.findUniqueOrThrow({
         where: { id: tenantId },
         include: { plan: true },
@@ -116,8 +123,9 @@ export class AppointmentsService {
       );
 
       const patientId = await this.resolvePatient(tx, tenantId, input);
+      const patient = await tx.patient.findUniqueOrThrow({ where: { id: patientId } });
 
-      return tx.appointment.create({
+      const created = await tx.appointment.create({
         data: {
           tenantId,
           date: input.date,
@@ -130,14 +138,37 @@ export class AppointmentsService {
         },
         select: SELECT,
       });
+
+      const settings = (tenant.settings ?? {}) as { utcOffsetMinutes?: number };
+      const emailContext: AppointmentEmailContext = {
+        tenantName: tenant.name,
+        serviceName: service.name,
+        durationMinutes: service.duration,
+        professionalName: professional.name,
+        professionalEmail: professional.email,
+        patientName: patient.name,
+        patientEmail: patient.email,
+        date: input.date,
+        utcOffsetMinutes: settings.utcOffsetMinutes ?? DEFAULT_UTC_OFFSET_MINUTES,
+      };
+      return { appointment: created, emailCtx: emailContext };
     });
+
+    // Só depois do commit — falha de email não desfaz o agendamento.
+    this.notifications.appointmentConfirmed(emailCtx);
+    return appointment;
   }
 
-  update(tenantId: string, id: string, input: UpdateAppointmentInput) {
-    return this.prisma.withTenant(tenantId, async (tx) => {
+  async update(tenantId: string, id: string, input: UpdateAppointmentInput) {
+    const { appointment, cancelCtx } = await this.prisma.withTenant(tenantId, async (tx) => {
       const existing = await tx.appointment.findFirst({
         where: { id, tenantId },
-        include: { service: { select: { duration: true } } },
+        include: {
+          tenant: { select: { name: true, settings: true } },
+          service: { select: { name: true, duration: true } },
+          professional: { select: { name: true } },
+          patient: { select: { name: true, email: true } },
+        },
       });
       if (!existing) throw new NotFoundException('Agendamento não encontrado.');
 
@@ -152,7 +183,7 @@ export class AppointmentsService {
         );
       }
 
-      return tx.appointment.update({
+      const updated = await tx.appointment.update({
         where: { id },
         data: {
           ...(input.date && { date: input.date }),
@@ -161,7 +192,26 @@ export class AppointmentsService {
         },
         select: SELECT,
       });
+
+      const becameCanceled = input.status === 'CANCELED' && existing.status !== 'CANCELED';
+      const settings = (existing.tenant.settings ?? {}) as { utcOffsetMinutes?: number };
+      const emailContext: AppointmentEmailContext | null = becameCanceled
+        ? {
+            tenantName: existing.tenant.name,
+            serviceName: existing.service.name,
+            durationMinutes: existing.service.duration,
+            professionalName: existing.professional.name,
+            patientName: existing.patient.name,
+            patientEmail: existing.patient.email,
+            date: existing.date,
+            utcOffsetMinutes: settings.utcOffsetMinutes ?? DEFAULT_UTC_OFFSET_MINUTES,
+          }
+        : null;
+      return { appointment: updated, cancelCtx: emailContext };
     });
+
+    if (cancelCtx) this.notifications.appointmentCanceled(cancelCtx);
+    return appointment;
   }
 
   /** Conflito com agendamentos ativos e bloqueios do profissional. */
