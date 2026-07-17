@@ -26,6 +26,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Client Prisma antes do turbo: o generate escreve no node_modules da
+      # raiz (fora dos outputs das tasks), então não pode depender nem da
+      # ordem do grafo nem de cache hit do turbo.
+      - run: pnpm --filter @consultorio/db prisma:generate
+
       # Cache do turbo: reaproveita builds/testes de pacotes não alterados
       - uses: actions/cache@v4
         with:
