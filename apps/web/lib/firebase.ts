@@ -31,3 +31,7 @@ export function getFirebaseAuth(): Auth {
 }
 
 export const googleProvider = new GoogleAuthProvider();
+
+/** Onde guardamos o email digitado antes de mandar o magic link, para
+ * completar o login quando o usuário volta pelo link (mesmo navegador). */
+export const MAGIC_LINK_EMAIL_KEY = 'consultorio:magicLinkEmail';

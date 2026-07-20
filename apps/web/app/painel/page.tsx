@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
-import { getFirebaseAuth, googleProvider } from '../../lib/firebase';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { getFirebaseAuth } from '../../lib/firebase';
 import { api, ApiError } from '../../lib/api';
 import type { Me, PlanUsage } from '../../lib/painel-types';
 import { AgendaSection } from './agenda-section';
 import { PatientsSection } from './patients-section';
 import { ProfessionalsSection } from './professionals-section';
 import { ServicesSection } from './services-section';
+import { AuthPanel } from '../../components/auth-panel';
 
 type Tab = 'agenda' | 'patients' | 'professionals' | 'services';
 
@@ -53,15 +54,6 @@ export default function PainelPage() {
   const nearLimit =
     usage !== null && usage.limit <= 100_000 && usage.used >= Math.ceil(usage.limit * 0.8);
 
-  async function loginWithGoogle() {
-    setError(null);
-    try {
-      await signInWithPopup(getFirebaseAuth(), googleProvider);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-
   return (
     <main className="min-h-screen">
       <header className="border-b border-[color:var(--color-rule)]">
@@ -96,15 +88,13 @@ export default function PainelPage() {
         ) : !user ? (
           <div className="max-w-md py-12">
             <p className="section-number">§ Painel</p>
-            <h1 className="font-serif text-4xl md:text-5xl mt-3 leading-[1.05] tracking-[-0.02em]">
-              Entre para abrir o caderno.
-            </h1>
-            <button onClick={loginWithGoogle} className="btn-ink mt-8">
-              Entrar com Google
-            </button>
-            {error && (
-              <p className="mt-5 text-sm text-[color:var(--color-clay-deep)]">{error}</p>
-            )}
+            <AuthPanel
+              heading={
+                <h1 className="font-serif text-4xl md:text-5xl mt-3 leading-[1.05] tracking-[-0.02em]">
+                  Entre para abrir o caderno.
+                </h1>
+              }
+            />
           </div>
         ) : noTenant ? (
           <div className="max-w-md py-12">

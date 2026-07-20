@@ -3,12 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { CreateTenantSchema, type HealthCategory } from '@consultorio/contracts';
-import { getFirebaseAuth, googleProvider } from '../../lib/firebase';
+import { getFirebaseAuth } from '../../lib/firebase';
 import { api, ApiError } from '../../lib/api';
 import type { Me } from '../../lib/painel-types';
 import { slugify } from '../../lib/slug';
+import { AuthPanel } from '../../components/auth-panel';
 
 const CATEGORIES: { value: HealthCategory; label: string }[] = [
   { value: 'PSICOLOGIA', label: 'Psicologia' },
@@ -63,15 +64,6 @@ export default function OnboardingPage() {
 
   // Derivado no render: acompanha o nome até o usuário editar o campo.
   const slug = slugTouched ? manualSlug : slugify(name);
-
-  async function loginWithGoogle() {
-    setError(null);
-    try {
-      await signInWithPopup(getFirebaseAuth(), googleProvider);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -153,44 +145,24 @@ export default function OnboardingPage() {
           ) : !user ? (
             <div className="max-w-md">
               <p className="section-number">§ 1</p>
-              <h2 className="font-serif text-4xl md:text-5xl mt-3 leading-[1.05] tracking-[-0.02em]">
-                Primeiro, quem é você?
-              </h2>
-              <p className="mt-4 text-[color:var(--color-ink-soft)] leading-relaxed">
-                Usamos sua conta Google só pra guardar sua sessão. Nada é publicado, nada é
-                compartilhado.
-              </p>
-              <button onClick={loginWithGoogle} className="btn-ink mt-8">
-                <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
-                  <path
-                    fill="#fff"
-                    d="M17.64 9.2c0-.64-.06-1.25-.17-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.71v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.61z"
-                  />
-                  <path
-                    fill="#fff"
-                    d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.71H.96v2.33A9 9 0 0 0 9 18z"
-                    opacity="0.85"
-                  />
-                  <path
-                    fill="#fff"
-                    d="M3.97 10.71A5.4 5.4 0 0 1 3.68 9c0-.59.1-1.17.29-1.71V4.96H.96A9 9 0 0 0 0 9c0 1.45.35 2.82.96 4.04l3.01-2.33z"
-                    opacity="0.7"
-                  />
-                  <path
-                    fill="#fff"
-                    d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.89 11.43 0 9 0A9 9 0 0 0 .96 4.96l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"
-                    opacity="0.55"
-                  />
-                </svg>
-                Entrar com Google
-              </button>
-              {error && (
-                <p className="mt-5 text-sm text-[color:var(--color-clay-deep)]">{error}</p>
-              )}
-              <p className="mt-10 text-xs text-[color:var(--color-ink-soft)] max-w-sm">
-                Ao continuar você concorda com os termos e a política de privacidade. LGPD,
-                sem letrinhas miúdas.
-              </p>
+              <AuthPanel
+                heading={
+                  <h2 className="font-serif text-4xl md:text-5xl mt-3 leading-[1.05] tracking-[-0.02em]">
+                    Primeiro, quem é você?
+                  </h2>
+                }
+                description={
+                  <p className="mt-4 text-[color:var(--color-ink-soft)] leading-relaxed">
+                    Entre com Google, email e senha, ou peça um link de acesso por email.
+                  </p>
+                }
+                footer={
+                  <p className="mt-10 text-xs text-[color:var(--color-ink-soft)] max-w-sm">
+                    Ao continuar você concorda com os termos e a política de privacidade.
+                    LGPD, sem letrinhas miúdas.
+                  </p>
+                }
+              />
             </div>
           ) : existing === 'checking' ? (
             <p className="font-serif italic text-[color:var(--color-ink-soft)]">
