@@ -120,8 +120,13 @@ export class NotificationsService {
   }
 
   private fire(message: { to: string; subject: string; html: string }): void {
-    void this.email.send(message).catch((err: unknown) => {
-      this.logger.error(`Falha ao enviar email para ${message.to}: ${String(err)}`);
-    });
+    void this.email
+      .send(message)
+      .then(() => {
+        this.logger.log(`Email enviado para ${message.to}: "${message.subject}"`);
+      })
+      .catch((err: unknown) => {
+        this.logger.error(`Falha ao enviar email para ${message.to}: ${String(err)}`);
+      });
   }
 }
