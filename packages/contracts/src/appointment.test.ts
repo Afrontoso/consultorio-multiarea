@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { AppointmentStatusSchema, CreateAppointmentSchema } from './appointment';
+import {
+  AppointmentStatusSchema,
+  CreateAppointmentSchema,
+  PublicCreateAppointmentSchema,
+} from './appointment';
 
 const cuid = 'c' + 'x'.repeat(24);
 
@@ -44,6 +48,31 @@ describe('CreateAppointmentSchema', () => {
   it('rejects bad recurrence', () => {
     expect(() =>
       CreateAppointmentSchema.parse({ ...valid, recurrence: 'DAILY' }),
+    ).toThrow();
+  });
+});
+
+describe('PublicCreateAppointmentSchema', () => {
+  const publicValid = {
+    date: '2026-05-01T14:00:00Z',
+    professionalId: cuid,
+    serviceId: cuid,
+    patient: { name: 'Maria da Silva', phone: '11999990000' },
+    consent: true,
+  };
+
+  it('accepts payload with consent', () => {
+    expect(PublicCreateAppointmentSchema.parse(publicValid).consent).toBe(true);
+  });
+
+  it('rejects when consent is missing', () => {
+    const { consent: _omit, ...withoutConsent } = publicValid;
+    expect(() => PublicCreateAppointmentSchema.parse(withoutConsent)).toThrow();
+  });
+
+  it('rejects when consent is false', () => {
+    expect(() =>
+      PublicCreateAppointmentSchema.parse({ ...publicValid, consent: false }),
     ).toThrow();
   });
 });

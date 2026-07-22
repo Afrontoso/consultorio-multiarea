@@ -5,10 +5,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type {
-  CreateAppointmentInput,
-  ListAppointmentsQuery,
-  UpdateAppointmentInput,
+import {
+  TERMS_VERSION,
+  type CreateAppointmentInput,
+  type ListAppointmentsQuery,
+  type UpdateAppointmentInput,
 } from '@consultorio/contracts';
 import { PrismaService, type TenantTx } from '../prisma/prisma.service';
 import { DEFAULT_UTC_OFFSET_MINUTES } from '../availability/slots';
@@ -102,7 +103,7 @@ export class AppointmentsService {
     });
   }
 
-  async create(tenantId: string, input: CreateAppointmentInput) {
+  async create(tenantId: string, input: CreateAppointmentInput & { consent?: boolean }) {
     // Transação única: checagem de limite/conflito e criação são atômicas.
     const { appointment, emailCtx } = await this.prisma.withTenant(tenantId, async (tx) => {
       const tenant = await tx.tenant.findUniqueOrThrow({
@@ -315,7 +316,11 @@ export class AppointmentsService {
   }
 
   /** patientId existente ou upsert do paciente inline pelo telefone. */
-  private async resolvePatient(tx: TenantTx, tenantId: string, input: CreateAppointmentInput) {
+  private async resolvePatient(
+    tx: TenantTx,
+    tenantId: string,
+    input: CreateAppointmentInput & { consent?: boolean },
+  ) {
     if (input.patientId) {
       const patient = await tx.patient.findFirst({
         where: { id: input.patientId, tenantId },
@@ -326,11 +331,16 @@ export class AppointmentsService {
     if (!input.patient) {
       throw new BadRequestException('Informe patientId ou os dados do paciente.');
     }
+    // Consentimento (LGPD): registrado quando o titular aceita os termos no
+    // agendamento público. Reagendar reativa a ficha e renova o consentimento.
+    const consentData =
+      input.consent === true
+        ? { consentAt: new Date(), consentVersion: TERMS_VERSION }
+        : {};
     const patient = await tx.patient.upsert({
       where: { tenantId_phone: { tenantId, phone: input.patient.phone } },
-      // Agendar de novo reativa ficha soft-deletada (consentimento renovado).
-      update: { name: input.patient.name, email: input.patient.email, deletedAt: null },
-      create: { ...input.patient, tenantId },
+      update: { name: input.patient.name, email: input.patient.email, deletedAt: null, ...consentData },
+      create: { ...input.patient, tenantId, ...consentData },
     });
     return patient.id;
   }

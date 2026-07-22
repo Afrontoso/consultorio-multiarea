@@ -133,9 +133,15 @@ model Patient {
   name      String
   email     String?
   phone     String
-  birthDate DateTime?
-  notes     String?
-  deletedAt DateTime? // soft-delete (LGPD); purge definitivo fica para um job futuro
+  // birthDate e notes são dados sensíveis (LGPD): guardados cifrados
+  // (AES-256-GCM em nível de aplicação, formato "v1:iv:tag:ct"). A API
+  // cifra na escrita e decifra na leitura — ver common/crypto/field-crypto.
+  birthDate String? // ciphertext de uma data ISO
+  notes     String? // ciphertext
+  // Consentimento (LGPD): quando o titular aceitou os termos e qual versão.
+  consentAt      DateTime?
+  consentVersion String?
+  deletedAt DateTime? // soft-delete (LGPD); purge definitivo via script (30 dias)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 

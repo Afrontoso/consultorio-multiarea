@@ -5,13 +5,21 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { getAuth } from 'firebase-admin/auth';
-import type {
-  CreatePatientInput,
-  ListPatientsQuery,
-  UpdatePatientInput,
+import {
+  TERMS_VERSION,
+  type CreatePatientInput,
+  type ListPatientsQuery,
+  type UpdatePatientInput,
 } from '@consultorio/contracts';
+import { Prisma } from '@consultorio/db';
 import { PrismaService, type TenantTx } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import {
+  decryptField,
+  decryptOptional,
+  encryptField,
+  encryptOptional,
+} from '../../common/crypto/field-crypto';
 
 const SELECT = {
   id: true,
@@ -23,6 +31,38 @@ const SELECT = {
   createdAt: true,
   user: { select: { id: true } },
 } as const;
+
+type PatientWrite = CreatePatientInput | UpdatePatientInput;
+
+/**
+ * Monta os dados de escrita: cifra os campos sensíveis (`notes`, `birthDate`)
+ * e traduz o `consent` do contrato em `consentAt`/`consentVersion`. Só toca
+ * chaves presentes no input (seguro para create e para update parcial).
+ */
+function toWriteData(input: PatientWrite): Prisma.PatientUncheckedUpdateInput {
+  const { consent, birthDate, notes, ...rest } = input;
+  const data: Prisma.PatientUncheckedUpdateInput = { ...rest };
+  if ('notes' in input) data.notes = encryptOptional(notes ?? null);
+  if ('birthDate' in input) {
+    data.birthDate = birthDate ? encryptField(new Date(birthDate).toISOString()) : null;
+  }
+  if (consent === true) {
+    data.consentAt = new Date();
+    data.consentVersion = TERMS_VERSION;
+  }
+  return data;
+}
+
+/** Decifra os campos sensíveis de uma ficha lida do banco. */
+function decryptPatient<T extends { birthDate: string | null; notes: string | null }>(
+  patient: T,
+): Omit<T, 'birthDate' | 'notes'> & { birthDate: Date | null; notes: string | null } {
+  return {
+    ...patient,
+    notes: decryptOptional(patient.notes),
+    birthDate: patient.birthDate ? new Date(decryptField(patient.birthDate)) : null,
+  };
+}
 
 function inviteLoginUrl(): string {
   const origin = process.env.WEB_ORIGIN?.split(',')[0]?.trim() || 'http://localhost:3000';
@@ -36,8 +76,8 @@ export class PatientsService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  list(tenantId: string, query: ListPatientsQuery) {
-    return this.prisma.withTenant(tenantId, (tx) =>
+  async list(tenantId: string, query: ListPatientsQuery) {
+    const patients = await this.prisma.withTenant(tenantId, (tx) =>
       tx.patient.findMany({
         where: {
           tenantId,
@@ -53,6 +93,7 @@ export class PatientsService {
         select: SELECT,
       }),
     );
+    return patients.map(decryptPatient);
   }
 
   /** Ficha do paciente: dados + histórico de agendamentos. */
@@ -76,7 +117,7 @@ export class PatientsService {
       }),
     );
     if (!patient) throw new NotFoundException('Paciente não encontrado.');
-    return patient;
+    return decryptPatient(patient);
   }
 
   create(tenantId: string, input: CreatePatientInput) {
@@ -89,16 +130,18 @@ export class PatientsService {
       }
       if (existing) {
         // Telefone de um paciente soft-deletado: reativa a ficha com os dados novos.
-        return tx.patient.update({
+        const patient = await tx.patient.update({
           where: { id: existing.id },
-          data: { ...input, deletedAt: null },
+          data: { ...toWriteData(input), deletedAt: null },
           select: SELECT,
         });
+        return decryptPatient(patient);
       }
-      return tx.patient.create({
-        data: { ...input, tenantId },
+      const patient = await tx.patient.create({
+        data: { ...toWriteData(input), tenantId } as Prisma.PatientUncheckedCreateInput,
         select: SELECT,
       });
+      return decryptPatient(patient);
     });
   }
 
@@ -113,11 +156,12 @@ export class PatientsService {
           throw new ConflictException(`Já existe paciente com o telefone ${input.phone}.`);
         }
       }
-      return tx.patient.update({
+      const patient = await tx.patient.update({
         where: { id },
-        data: input,
+        data: toWriteData(input),
         select: SELECT,
       });
+      return decryptPatient(patient);
     });
   }
 

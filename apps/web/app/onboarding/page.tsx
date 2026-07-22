@@ -316,8 +316,15 @@ export default function OnboardingPage() {
                 }
                 footer={
                   <p className="mt-10 text-xs text-[color:var(--color-ink-soft)] max-w-sm">
-                    Ao continuar você concorda com os termos e a política de privacidade.
-                    LGPD, sem letrinhas miúdas.
+                    Ao continuar você concorda com os{' '}
+                    <Link href="/termos" target="_blank" className="link-editorial">
+                      Termos de Uso
+                    </Link>{' '}
+                    e a{' '}
+                    <Link href="/privacidade" target="_blank" className="link-editorial">
+                      Política de Privacidade
+                    </Link>
+                    . LGPD, sem letrinhas miúdas.
                   </p>
                 }
               />

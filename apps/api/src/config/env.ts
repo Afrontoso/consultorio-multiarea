@@ -19,6 +19,9 @@ const EnvSchema = z
     REDIS_URL: z.string().optional(),
     RESEND_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().optional(),
+    // Chave AES-256 (32 bytes em base64) para cifrar campos sensíveis do
+    // paciente. Opcional em dev; obrigatória em produção (ver superRefine).
+    FIELD_ENCRYPTION_KEY: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     const firebase = [env.FIREBASE_PROJECT_ID, env.FIREBASE_CLIENT_EMAIL, env.FIREBASE_PRIVATE_KEY];
@@ -40,6 +43,12 @@ const EnvSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'Em produção WEB_ORIGIN é obrigatória (allowlist de CORS)',
+      });
+    }
+    if (env.NODE_ENV === 'production' && !env.FIELD_ENCRYPTION_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Em produção FIELD_ENCRYPTION_KEY é obrigatória (cifra os dados sensíveis do paciente)',
       });
     }
   });
