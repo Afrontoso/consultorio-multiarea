@@ -49,6 +49,7 @@ model User {
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id])
   professional Professional? @relation(fields: [professionalId], references: [id])
+  patient      Patient?      @relation(fields: [patientId], references: [id])
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -141,6 +142,7 @@ model Patient {
   tenant        Tenant         @relation(fields: [tenantId], references: [id])
   appointments  Appointment[]
   professionals Professional[] @relation("PatientToProfessional")
+  user          User?
 
   @@unique([tenantId, phone])
   @@index([tenantId])

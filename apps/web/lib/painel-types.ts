@@ -63,6 +63,7 @@ export interface PatientItem {
   birthDate: string | null;
   notes: string | null;
   createdAt: string;
+  user: { id: string } | null;
 }
 
 export interface PatientDetail extends PatientItem {

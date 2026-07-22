@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   CreatePatientSchema,
   ListPatientsQuerySchema,
@@ -52,5 +63,13 @@ export class PatientsController {
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentMember() member: TenantMember) {
     return this.patients.remove(member.tenantId, id);
+  }
+
+  @Post(':id/invite')
+  invite(@Param('id') id: string, @CurrentMember() member: TenantMember) {
+    if (member.role !== 'OWNER') {
+      throw new ForbiddenException('Apenas o dono do consultório pode convidar pacientes.');
+    }
+    return this.patients.invite(member.tenantId, id);
   }
 }

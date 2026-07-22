@@ -36,6 +36,8 @@ export function PatientsSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [invited, setInvited] = useState<string[]>([]);
 
   useEffect(() => {
     let stale = false;
@@ -93,6 +95,19 @@ export function PatientsSection() {
       setError(err instanceof ApiError ? err.message : (err as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleInvite(p: PatientItem) {
+    setError(null);
+    setInvitingId(p.id);
+    try {
+      await api(`/patients/${p.id}/invite`, { method: 'POST' });
+      setInvited((prev) => [...prev, p.id]);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : (err as Error).message);
+    } finally {
+      setInvitingId(null);
     }
   }
 
@@ -256,6 +271,20 @@ export function PatientsSection() {
                     {p.email && ` · ${p.email}`}
                   </p>
                 </div>
+                {p.user ? (
+                  <span className="text-xs text-[color:var(--color-moss)]">tem acesso</span>
+                ) : invited.includes(p.id) ? (
+                  <span className="text-xs text-[color:var(--color-moss)]">convite enviado</span>
+                ) : (
+                  <button
+                    onClick={() => handleInvite(p)}
+                    disabled={invitingId === p.id || !p.email}
+                    title={!p.email ? 'Cadastre um email para convidar' : undefined}
+                    className="text-xs link-editorial disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {invitingId === p.id ? 'convidando…' : 'convidar'}
+                  </button>
+                )}
                 <button onClick={() => setSelectedId(p.id)} className="text-xs link-editorial">
                   ficha
                 </button>

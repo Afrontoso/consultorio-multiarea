@@ -1,4 +1,11 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+
+const getUserByEmail = jest.fn();
+const createUser = jest.fn();
+jest.mock('firebase-admin/auth', () => ({
+  getAuth: () => ({ getUserByEmail, createUser }),
+}));
+
 import { PatientsService } from './patients.service';
 
 type PrismaMock = {
@@ -9,6 +16,8 @@ type PrismaMock = {
     create: jest.Mock;
     update: jest.Mock;
   };
+  user: { findUnique: jest.Mock; create: jest.Mock };
+  tenant: { findUniqueOrThrow: jest.Mock };
   appointment: { count: jest.Mock };
   withTenant: jest.Mock;
 };
@@ -22,6 +31,8 @@ function buildPrismaMock(): PrismaMock {
       create: jest.fn(),
       update: jest.fn(),
     },
+    user: { findUnique: jest.fn(), create: jest.fn() },
+    tenant: { findUniqueOrThrow: jest.fn() },
     appointment: { count: jest.fn().mockResolvedValue(0) },
   };
   // withTenant entrega o próprio mock como tx (mesmos jest.Mock por modelo).
@@ -41,8 +52,9 @@ describe('PatientsService', () => {
 
   beforeEach(() => {
     prisma = buildPrismaMock();
+    const notifications = { patientInvited: jest.fn() };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    service = new PatientsService(prisma as any);
+    service = new PatientsService(prisma as any, notifications as any);
   });
 
   describe('list', () => {
@@ -145,6 +157,88 @@ describe('PatientsService', () => {
       prisma.patient.findFirst.mockResolvedValue(null);
 
       await expect(service.get('t-1', 'pat-x')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('invite', () => {
+    beforeEach(() => {
+      getUserByEmail.mockReset();
+      createUser.mockReset();
+    });
+
+    it('404 para paciente que não pertence ao tenant', async () => {
+      prisma.patient.findFirst.mockResolvedValue(null);
+      await expect(service.invite('t-1', 'pat-alheio')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('400 quando o paciente não tem email cadastrado', async () => {
+      prisma.patient.findFirst.mockResolvedValue({ id: 'pat-1', name: 'Maria', email: null });
+      await expect(service.invite('t-1', 'pat-1')).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('409 quando o paciente já tem acesso', async () => {
+      prisma.patient.findFirst.mockResolvedValue({
+        id: 'pat-1',
+        name: 'Maria',
+        email: 'maria@example.com',
+      });
+      prisma.user.findUnique.mockResolvedValueOnce({ id: 'u-1' }); // by patientId
+      await expect(service.invite('t-1', 'pat-1')).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('409 quando o email já está em uso por outro usuário do tenant', async () => {
+      prisma.patient.findFirst.mockResolvedValue({
+        id: 'pat-1',
+        name: 'Maria',
+        email: 'maria@example.com',
+      });
+      prisma.user.findUnique
+        .mockResolvedValueOnce(null) // by patientId
+        .mockResolvedValueOnce({ id: 'u-2' }); // by tenantId_email
+      await expect(service.invite('t-1', 'pat-1')).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('convida com sucesso reaproveitando usuário Firebase existente', async () => {
+      prisma.patient.findFirst.mockResolvedValue({
+        id: 'pat-1',
+        name: 'Maria',
+        email: 'maria@example.com',
+      });
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.tenant.findUniqueOrThrow.mockResolvedValue({ id: 't-1', name: 'Clínica Teste' });
+      getUserByEmail.mockResolvedValue({ uid: 'firebase-uid-1' });
+
+      const result = await service.invite('t-1', 'pat-1');
+
+      expect(createUser).not.toHaveBeenCalled();
+      expect(prisma.user.create).toHaveBeenCalledWith({
+        data: {
+          firebaseUid: 'firebase-uid-1',
+          email: 'maria@example.com',
+          tenantId: 't-1',
+          role: 'PATIENT',
+          patientId: 'pat-1',
+        },
+      });
+      expect(result).toEqual({ invited: true, email: 'maria@example.com' });
+    });
+
+    it('cria usuário Firebase quando não existe um com o email', async () => {
+      prisma.patient.findFirst.mockResolvedValue({
+        id: 'pat-1',
+        name: 'Maria',
+        email: 'maria@example.com',
+      });
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.tenant.findUniqueOrThrow.mockResolvedValue({ id: 't-1', name: 'Clínica Teste' });
+      getUserByEmail.mockRejectedValue(new Error('user-not-found'));
+      createUser.mockResolvedValue({ uid: 'firebase-uid-2' });
+
+      await service.invite('t-1', 'pat-1');
+
+      expect(createUser).toHaveBeenCalledWith({ email: 'maria@example.com' });
     });
   });
 });

@@ -203,6 +203,7 @@ describe('AppointmentsService', () => {
       date: new Date('2026-07-13T12:00:00Z'),
       status: 'CONFIRMED',
       professionalId: 'prof-1',
+      patientId: 'pat-1',
       tenant: { name: 'Clínica Teste', settings: null },
       service: { name: 'Sessão', duration: 60 },
       professional: { name: 'Ana' },
@@ -259,6 +260,124 @@ describe('AppointmentsService', () => {
       await expect(
         service.update('t-1', 'apt-alheio', { status: 'CANCELED' }),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('update — restrição por paciente (restrictToPatientId)', () => {
+    const baseExisting = {
+      id: 'apt-1',
+      status: 'CONFIRMED',
+      professionalId: 'prof-1',
+      patientId: 'pat-1',
+      tenant: { name: 'Clínica Teste', settings: null as unknown },
+      service: { name: 'Sessão', duration: 60 },
+      professional: { name: 'Ana' },
+      patient: { name: 'Paciente Teste', email: 'paciente@example.com' },
+    };
+
+    function futureAppointment(hoursFromNow: number, overrides: Record<string, unknown> = {}) {
+      return {
+        ...baseExisting,
+        date: new Date(Date.now() + hoursFromNow * 60 * 60 * 1000),
+        ...overrides,
+      };
+    }
+
+    it('rejeita se o agendamento não é do paciente autenticado', async () => {
+      prisma.appointment.findFirst.mockResolvedValue(
+        futureAppointment(48, { patientId: 'pat-outro' }),
+      );
+
+      await expect(
+        service.update('t-1', 'apt-1', { status: 'CANCELED' }, undefined, 'pat-1'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('rejeita alterar consulta que já passou', async () => {
+      prisma.appointment.findFirst.mockResolvedValue(futureAppointment(-2));
+
+      await expect(
+        service.update('t-1', 'apt-1', { status: 'CANCELED' }, undefined, 'pat-1'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('rejeita cancelar dentro da antecedência mínima padrão (24h)', async () => {
+      prisma.appointment.findFirst.mockResolvedValue(futureAppointment(1));
+
+      await expect(
+        service.update('t-1', 'apt-1', { status: 'CANCELED' }, undefined, 'pat-1'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('rejeita reagendar dentro da antecedência mínima padrão (24h)', async () => {
+      const existing = futureAppointment(1);
+      prisma.appointment.findFirst.mockResolvedValue(existing);
+
+      await expect(
+        service.update(
+          't-1',
+          'apt-1',
+          { date: new Date(existing.date.getTime() + 60 * 60 * 1000) },
+          undefined,
+          'pat-1',
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('permite cancelar fora da janela de antecedência', async () => {
+      prisma.appointment.findFirst.mockResolvedValue(futureAppointment(48));
+      prisma.appointment.update.mockResolvedValue({ id: 'apt-1' });
+
+      await service.update('t-1', 'apt-1', { status: 'CANCELED' }, undefined, 'pat-1');
+
+      expect(notifications.appointmentCanceled).toHaveBeenCalled();
+    });
+
+    it('permite reagendar fora da janela, revalidando conflito', async () => {
+      const existing = futureAppointment(48);
+      prisma.appointment.findFirst.mockResolvedValue(existing);
+      prisma.appointment.update.mockResolvedValue({ id: 'apt-1' });
+
+      await service.update(
+        't-1',
+        'apt-1',
+        { date: new Date(existing.date.getTime() + 60 * 60 * 1000) },
+        undefined,
+        'pat-1',
+      );
+
+      expect(prisma.appointment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ id: { not: 'apt-1' } }) }),
+      );
+    });
+
+    it('respeita cancellationMinNoticeMinutes customizado do tenant', async () => {
+      prisma.appointment.findFirst.mockResolvedValue(
+        futureAppointment(1.5, {
+          tenant: { name: 'Clínica Teste', settings: { cancellationMinNoticeMinutes: 60 } },
+        }),
+      );
+      prisma.appointment.update.mockResolvedValue({ id: 'apt-1' });
+
+      await expect(
+        service.update('t-1', 'apt-1', { status: 'CANCELED' }, undefined, 'pat-1'),
+      ).resolves.toBeDefined();
+    });
+  });
+
+  describe('list', () => {
+    it('filtra por professionalId quando informado', async () => {
+      await service.list('t-1', { professionalId: 'prof-1' });
+      expect(prisma.appointment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ professionalId: 'prof-1' }) }),
+      );
+    });
+
+    it('filtra por patientId quando informado', async () => {
+      await service.list('t-1', { patientId: 'pat-1' });
+      expect(prisma.appointment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ patientId: 'pat-1' }) }),
+      );
     });
   });
 

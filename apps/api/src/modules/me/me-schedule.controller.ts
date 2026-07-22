@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -10,13 +11,14 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import type { z } from 'zod';
 import {
   CreateScheduleBlockSchema,
   ListAppointmentsQuerySchema,
+  PatientUpdateAppointmentSchema,
   UpdateAppointmentSchema,
   type CreateScheduleBlockInput,
   type ListAppointmentsQuery,
-  type UpdateAppointmentInput,
 } from '@consultorio/contracts';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { CurrentMember } from '../../common/decorators/current-member.decorator';
@@ -44,6 +46,10 @@ export class MeScheduleController {
     @Query(new ZodValidationPipe(ListAppointmentsQuerySchema)) query: ListAppointmentsQuery,
     @CurrentMember() member: TenantMember,
   ) {
+    if (member.role === 'PATIENT') {
+      const patientId = requirePatientId(member);
+      return this.appointments.list(member.tenantId, { ...query, patientId });
+    }
     const professionalId = requireProfessional(member);
     return this.appointments.list(member.tenantId, { ...query, professionalId });
   }
@@ -51,11 +57,17 @@ export class MeScheduleController {
   @Patch('appointments/:id')
   updateAppointment(
     @Param('id') id: string,
-    @Body(new ZodValidationPipe(UpdateAppointmentSchema)) body: UpdateAppointmentInput,
+    @Body() body: unknown,
     @CurrentMember() member: TenantMember,
   ) {
+    if (member.role === 'PATIENT') {
+      const patientId = requirePatientId(member);
+      const input = parseOrThrow(PatientUpdateAppointmentSchema, body);
+      return this.appointments.update(member.tenantId, id, input, undefined, patientId);
+    }
     const professionalId = requireProfessional(member);
-    return this.appointments.update(member.tenantId, id, body, professionalId);
+    const input = parseOrThrow(UpdateAppointmentSchema, body);
+    return this.appointments.update(member.tenantId, id, input, professionalId);
   }
 
   @Get('blocks')
@@ -85,4 +97,19 @@ function requireProfessional(member: TenantMember): string {
     throw new ForbiddenException('Este usuário não está vinculado a um profissional.');
   }
   return member.professionalId;
+}
+
+function requirePatientId(member: TenantMember): string {
+  if (!member.patientId) {
+    throw new ForbiddenException('Este usuário não está vinculado a um paciente.');
+  }
+  return member.patientId;
+}
+
+function parseOrThrow<T extends z.ZodTypeAny>(schema: T, body: unknown): z.infer<T> {
+  const result = schema.safeParse(body);
+  if (!result.success) {
+    throw new BadRequestException(result.error.issues.map((i) => i.message).join('; '));
+  }
+  return result.data;
 }

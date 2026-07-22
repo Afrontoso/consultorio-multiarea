@@ -14,6 +14,7 @@ export interface TenantMember {
   role: UserRole;
   email: string;
   professionalId: string | null;
+  patientId: string | null;
 }
 
 export interface MemberRequest extends AuthedRequest {
@@ -51,6 +52,7 @@ export class TenantMemberGuard implements CanActivate {
       role: user.role,
       email: user.email,
       professionalId: user.professionalId,
+      patientId: user.patientId,
     };
     return true;
   }
