@@ -47,7 +47,8 @@ model User {
   professionalId String?  @unique
   patientId      String?  @unique
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  professional Professional? @relation(fields: [professionalId], references: [id])
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -71,6 +72,7 @@ model Professional {
   patients      Patient[]       @relation("PatientToProfessional")
   workingHours  WorkingHours[]
   scheduleBlocks ScheduleBlock[]
+  user          User?
 
   @@unique([tenantId, email])
   @@index([tenantId])

@@ -26,6 +26,7 @@ export interface Professional {
   photoUrl: string | null;
   color: string;
   services: { id: string; name: string }[];
+  user: { id: string } | null;
 }
 
 export type AppointmentStatus = 'CONFIRMED' | 'PENDING' | 'CANCELED' | 'COMPLETED' | 'NO_SHOW';

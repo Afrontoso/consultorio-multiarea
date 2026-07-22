@@ -159,7 +159,12 @@ export class AppointmentsService {
     return appointment;
   }
 
-  async update(tenantId: string, id: string, input: UpdateAppointmentInput) {
+  async update(
+    tenantId: string,
+    id: string,
+    input: UpdateAppointmentInput,
+    restrictToProfessionalId?: string,
+  ) {
     const { appointment, cancelCtx } = await this.prisma.withTenant(tenantId, async (tx) => {
       const existing = await tx.appointment.findFirst({
         where: { id, tenantId },
@@ -171,6 +176,9 @@ export class AppointmentsService {
         },
       });
       if (!existing) throw new NotFoundException('Agendamento não encontrado.');
+      if (restrictToProfessionalId && existing.professionalId !== restrictToProfessionalId) {
+        throw new ForbiddenException('Este agendamento não é de um paciente seu.');
+      }
 
       if (input.date && input.date.getTime() !== existing.date.getTime()) {
         await this.ensureNoConflict(

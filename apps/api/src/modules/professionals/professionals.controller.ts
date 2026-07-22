@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
 import {
   CreateProfessionalSchema,
   CreateScheduleBlockSchema,
@@ -46,6 +57,14 @@ export class ProfessionalsController {
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentMember() member: TenantMember) {
     return this.professionals.remove(member.tenantId, id);
+  }
+
+  @Post(':id/invite')
+  invite(@Param('id') id: string, @CurrentMember() member: TenantMember) {
+    if (member.role !== 'OWNER') {
+      throw new ForbiddenException('Apenas o dono do consultório pode convidar profissionais.');
+    }
+    return this.professionals.invite(member.tenantId, id);
   }
 
   @Get(':id/working-hours')

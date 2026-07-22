@@ -16,6 +16,8 @@ export function ProfessionalsSection({ me }: { me: Me }) {
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [invited, setInvited] = useState<string[]>([]);
 
   useEffect(() => {
     api<Professional[]>('/professionals')
@@ -87,6 +89,19 @@ export function ProfessionalsSection({ me }: { me: Me }) {
       setItems((prev) => prev!.filter((x) => x.id !== p.id));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : (err as Error).message);
+    }
+  }
+
+  async function handleInvite(p: Professional) {
+    setError(null);
+    setInvitingId(p.id);
+    try {
+      await api(`/professionals/${p.id}/invite`, { method: 'POST' });
+      setInvited((prev) => [...prev, p.id]);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : (err as Error).message);
+    } finally {
+      setInvitingId(null);
     }
   }
 
@@ -236,6 +251,19 @@ export function ProfessionalsSection({ me }: { me: Me }) {
                       ` · ${p.services.map((s) => s.name).join(', ')}`}
                   </p>
                 </div>
+                {p.user ? (
+                  <span className="text-xs text-[color:var(--color-moss)]">tem acesso</span>
+                ) : invited.includes(p.id) ? (
+                  <span className="text-xs text-[color:var(--color-moss)]">convite enviado</span>
+                ) : (
+                  <button
+                    onClick={() => handleInvite(p)}
+                    disabled={invitingId === p.id}
+                    className="text-xs link-editorial"
+                  >
+                    {invitingId === p.id ? 'convidando…' : 'convidar'}
+                  </button>
+                )}
                 <button onClick={() => startEdit(p)} className="text-xs link-editorial">
                   editar
                 </button>

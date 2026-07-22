@@ -71,6 +71,23 @@ export class NotificationsService {
     }
   }
 
+  /** Convite para o profissional acessar o painel próprio. */
+  professionalInvited(ctx: {
+    to: string;
+    professionalName: string;
+    tenantName: string;
+    loginUrl: string;
+  }): void {
+    this.fire({
+      to: ctx.to,
+      subject: `Você foi convidado para o painel de ${ctx.tenantName}`,
+      html: layout(`Olá, ${ctx.professionalName}.`, [
+        `Você agora tem acesso ao painel de ${ctx.tenantName} para ver sua agenda.`,
+        `Entre em <a href="${ctx.loginUrl}">${ctx.loginUrl}</a> com o email <strong>${ctx.to}</strong> — use "Link mágico" para entrar sem senha, ou Google se for o mesmo email.`,
+      ]),
+    });
+  }
+
   /** Aviso de cancelamento para o paciente. */
   appointmentCanceled(ctx: AppointmentEmailContext): void {
     if (!ctx.patientEmail) return;

@@ -6,5 +6,6 @@ import { ProfessionalsService } from './professionals.service';
 @Module({
   controllers: [ProfessionalsController],
   providers: [ProfessionalsService, TenantMemberGuard],
+  exports: [ProfessionalsService],
 })
 export class ProfessionalsModule {}

@@ -1,4 +1,11 @@
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+
+const getUserByEmail = jest.fn();
+const createUser = jest.fn();
+jest.mock('firebase-admin/auth', () => ({
+  getAuth: () => ({ getUserByEmail, createUser }),
+}));
+
 import { ProfessionalsService } from './professionals.service';
 
 type PrismaMock = {
@@ -12,6 +19,7 @@ type PrismaMock = {
     update: jest.Mock;
     delete: jest.Mock;
   };
+  user: { findUnique: jest.Mock; create: jest.Mock };
   service: { findMany: jest.Mock };
   appointment: { count: jest.Mock };
   withTenant: jest.Mock;
@@ -29,6 +37,7 @@ function buildPrismaMock(): PrismaMock {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    user: { findUnique: jest.fn(), create: jest.fn() },
     service: { findMany: jest.fn() },
     appointment: { count: jest.fn() },
   };
@@ -54,8 +63,9 @@ describe('ProfessionalsService', () => {
 
   beforeEach(() => {
     prisma = buildPrismaMock();
+    const notifications = { professionalInvited: jest.fn() };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    service = new ProfessionalsService(prisma as any);
+    service = new ProfessionalsService(prisma as any, notifications as any);
   });
 
   describe('create', () => {
@@ -144,6 +154,78 @@ describe('ProfessionalsService', () => {
 
       expect(result).toEqual({ deleted: true });
       expect(prisma.professional.delete).toHaveBeenCalledWith({ where: { id: 'p-1' } });
+    });
+  });
+
+  describe('invite', () => {
+    beforeEach(() => {
+      getUserByEmail.mockReset();
+      createUser.mockReset();
+    });
+
+    it('throws NotFoundException when professional does not belong to tenant', async () => {
+      prisma.professional.findFirst.mockResolvedValue(null);
+      await expect(service.invite('t-1', 'p-alheio')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('throws ConflictException when professional already has a user', async () => {
+      prisma.professional.findFirst.mockResolvedValue({ id: 'p-1', email: 'ana@example.com' });
+      prisma.user.findUnique.mockResolvedValueOnce({ id: 'u-1' }); // by professionalId
+      await expect(service.invite('t-1', 'p-1')).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('throws ConflictException when email is already used by another user in the tenant', async () => {
+      prisma.professional.findFirst.mockResolvedValue({ id: 'p-1', email: 'ana@example.com' });
+      prisma.user.findUnique
+        .mockResolvedValueOnce(null) // by professionalId
+        .mockResolvedValueOnce({ id: 'u-2' }); // by tenantId_email
+      await expect(service.invite('t-1', 'p-1')).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('reuses an existing Firebase account by email and creates the User', async () => {
+      prisma.professional.findFirst.mockResolvedValue({
+        id: 'p-1',
+        name: 'Dra. Ana',
+        email: 'ana@example.com',
+      });
+      prisma.user.findUnique.mockResolvedValue(null);
+      getUserByEmail.mockResolvedValue({ uid: 'firebase-uid-1' });
+      prisma.user.create.mockResolvedValue({ id: 'u-new' });
+      prisma.tenant.findUniqueOrThrow.mockResolvedValue({ id: 't-1', name: 'Consultório X' });
+
+      const result = await service.invite('t-1', 'p-1');
+
+      expect(createUser).not.toHaveBeenCalled();
+      expect(prisma.user.create).toHaveBeenCalledWith({
+        data: {
+          firebaseUid: 'firebase-uid-1',
+          email: 'ana@example.com',
+          tenantId: 't-1',
+          role: 'PROFESSIONAL',
+          professionalId: 'p-1',
+        },
+      });
+      expect(result).toEqual({ invited: true, email: 'ana@example.com' });
+    });
+
+    it('creates a new Firebase account when none exists for the email', async () => {
+      prisma.professional.findFirst.mockResolvedValue({
+        id: 'p-1',
+        name: 'Dra. Ana',
+        email: 'ana@example.com',
+      });
+      prisma.user.findUnique.mockResolvedValue(null);
+      getUserByEmail.mockRejectedValue(new Error('user-not-found'));
+      createUser.mockResolvedValue({ uid: 'firebase-uid-2' });
+      prisma.user.create.mockResolvedValue({ id: 'u-new' });
+      prisma.tenant.findUniqueOrThrow.mockResolvedValue({ id: 't-1', name: 'Consultório X' });
+
+      await service.invite('t-1', 'p-1');
+
+      expect(createUser).toHaveBeenCalledWith({ email: 'ana@example.com' });
+      expect(prisma.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ firebaseUid: 'firebase-uid-2' }) }),
+      );
     });
   });
 });

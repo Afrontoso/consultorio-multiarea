@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { getFirebaseAuth } from '../../lib/firebase';
@@ -15,6 +16,7 @@ import { AuthPanel } from '../../components/auth-panel';
 type Tab = 'agenda' | 'patients' | 'professionals' | 'services';
 
 export default function PainelPage() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [me, setMe] = useState<Me | null>(null);
@@ -49,6 +51,12 @@ export default function PainelPage() {
       .then(setUsage)
       .catch(() => setUsage(null));
   }, [user]);
+
+  useEffect(() => {
+    if (me?.user.role === 'PROFESSIONAL') {
+      router.replace('/profissional');
+    }
+  }, [me, router]);
 
   // Aviso a partir de 80% do limite mensal (planos ilimitados usam sentinela alta).
   const nearLimit =
@@ -114,6 +122,10 @@ export default function PainelPage() {
               Carregando…
             </p>
           )
+        ) : me.user.role === 'PROFESSIONAL' ? (
+          <p className="font-serif italic text-[color:var(--color-ink-soft)]">
+            Indo para sua agenda…
+          </p>
         ) : (
           <>
             <div className="flex flex-wrap items-baseline justify-between gap-4">
