@@ -30,6 +30,10 @@ const SELECT = {
 // Janela de busca para checagem de conflito (maior duração possível de serviço).
 const MAX_SERVICE_MINUTES = 480;
 
+// Antecedência mínima padrão para o paciente cancelar/reagendar (24h), sobrescrita por
+// tenant.settings.cancellationMinNoticeMinutes.
+const DEFAULT_MIN_NOTICE_MINUTES = 1440;
+
 /** Janela UTC do mês-calendário que contém `date` no fuso do consultório. */
 export function monthWindowUtc(
   date: Date,
@@ -59,6 +63,7 @@ export class AppointmentsService {
         where: {
           tenantId,
           ...(query.professionalId && { professionalId: query.professionalId }),
+          ...(query.patientId && { patientId: query.patientId }),
           ...(query.status && { status: query.status }),
           date: {
             ...(query.from && { gte: query.from }),
@@ -164,6 +169,7 @@ export class AppointmentsService {
     id: string,
     input: UpdateAppointmentInput,
     restrictToProfessionalId?: string,
+    restrictToPatientId?: string,
   ) {
     const { appointment, cancelCtx } = await this.prisma.withTenant(tenantId, async (tx) => {
       const existing = await tx.appointment.findFirst({
@@ -178,6 +184,25 @@ export class AppointmentsService {
       if (!existing) throw new NotFoundException('Agendamento não encontrado.');
       if (restrictToProfessionalId && existing.professionalId !== restrictToProfessionalId) {
         throw new ForbiddenException('Este agendamento não é de um paciente seu.');
+      }
+      if (restrictToPatientId) {
+        if (existing.patientId !== restrictToPatientId) {
+          throw new ForbiddenException('Este agendamento não é seu.');
+        }
+        const settings = (existing.tenant.settings ?? {}) as {
+          cancellationMinNoticeMinutes?: number;
+        };
+        const minNoticeMinutes =
+          settings.cancellationMinNoticeMinutes ?? DEFAULT_MIN_NOTICE_MINUTES;
+        const now = Date.now();
+        if (existing.date.getTime() < now) {
+          throw new ForbiddenException('Não é possível alterar uma consulta que já passou.');
+        }
+        if (existing.date.getTime() - now < minNoticeMinutes * 60_000) {
+          throw new ForbiddenException(
+            `Cancelamentos e reagendamentos exigem pelo menos ${Math.round(minNoticeMinutes / 60)}h de antecedência.`,
+          );
+        }
       }
 
       if (input.date && input.date.getTime() !== existing.date.getTime()) {

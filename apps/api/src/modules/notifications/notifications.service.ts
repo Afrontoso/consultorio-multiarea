@@ -88,6 +88,23 @@ export class NotificationsService {
     });
   }
 
+  /** Convite para o paciente acessar a própria área (ver/reagendar/cancelar consultas). */
+  patientInvited(ctx: {
+    to: string;
+    patientName: string;
+    tenantName: string;
+    loginUrl: string;
+  }): void {
+    this.fire({
+      to: ctx.to,
+      subject: `Você foi convidado para acompanhar suas consultas em ${ctx.tenantName}`,
+      html: layout(`Olá, ${ctx.patientName}.`, [
+        `Você agora pode ver, reagendar e cancelar suas consultas em ${ctx.tenantName}.`,
+        `Entre em <a href="${ctx.loginUrl}">${ctx.loginUrl}</a> com o email <strong>${ctx.to}</strong> — use "Link mágico" para entrar sem senha, ou Google se for o mesmo email.`,
+      ]),
+    });
+  }
+
   /** Aviso de cancelamento para o paciente. */
   appointmentCanceled(ctx: AppointmentEmailContext): void {
     if (!ctx.patientEmail) return;
@@ -103,8 +120,13 @@ export class NotificationsService {
   }
 
   private fire(message: { to: string; subject: string; html: string }): void {
-    void this.email.send(message).catch((err: unknown) => {
-      this.logger.error(`Falha ao enviar email para ${message.to}: ${String(err)}`);
-    });
+    void this.email
+      .send(message)
+      .then(() => {
+        this.logger.log(`Email enviado para ${message.to}: "${message.subject}"`);
+      })
+      .catch((err: unknown) => {
+        this.logger.error(`Falha ao enviar email para ${message.to}: ${String(err)}`);
+      });
   }
 }

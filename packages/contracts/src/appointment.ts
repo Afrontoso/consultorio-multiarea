@@ -50,8 +50,21 @@ export const UpdateAppointmentSchema = z.object({
 });
 export type UpdateAppointmentInput = z.infer<typeof UpdateAppointmentSchema>;
 
+// Área do paciente: só reagenda (date) ou cancela (status), nunca os dois nem outros campos.
+export const PatientUpdateAppointmentSchema = z
+  .object({
+    date: z.coerce.date().optional(),
+    status: z.literal('CANCELED').optional(),
+  })
+  .strict()
+  .refine((d) => Boolean(d.date) !== Boolean(d.status), {
+    message: 'Informe date (reagendar) ou status CANCELED (cancelar), exatamente um dos dois.',
+  });
+export type PatientUpdateAppointmentInput = z.infer<typeof PatientUpdateAppointmentSchema>;
+
 export const ListAppointmentsQuerySchema = z.object({
   professionalId: z.string().cuid().optional(),
+  patientId: z.string().cuid().optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
   status: AppointmentStatusSchema.optional(),

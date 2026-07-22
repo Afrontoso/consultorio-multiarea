@@ -29,6 +29,7 @@ export class TenantAnyMemberGuard implements CanActivate {
       role: user.role,
       email: user.email,
       professionalId: user.professionalId,
+      patientId: user.patientId,
     };
     return true;
   }
