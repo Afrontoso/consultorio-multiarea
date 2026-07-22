@@ -1,0 +1,32 @@
+app = "consultorio-multiarea-api"
+primary_region = "gru"
+
+[build]
+  dockerfile = "apps/api/Dockerfile"
+
+# Roda as migrations do Prisma contra o Supabase antes de cada release ir ao ar.
+[deploy]
+  release_command = "pnpm --filter @consultorio/db exec prisma migrate deploy"
+
+[env]
+  PORT = "3333"
+  NODE_ENV = "production"
+
+[http_service]
+  internal_port = 3333
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[http_service.checks]]
+  grace_period = "10s"
+  interval = "30s"
+  method = "GET"
+  timeout = "5s"
+  path = "/v1/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
