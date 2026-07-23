@@ -62,6 +62,9 @@ export interface PatientItem {
   phone: string;
   birthDate: string | null;
   notes: string | null;
+  guardianName: string | null;
+  guardianPhone: string | null;
+  guardianRelationship: string | null;
   createdAt: string;
   user: { id: string } | null;
 }

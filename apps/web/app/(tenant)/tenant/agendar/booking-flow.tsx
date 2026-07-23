@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { isMinor } from '@consultorio/contracts';
 import { api, ApiError } from '../../../../lib/api';
 import { formatBRL } from '../../../../lib/money';
 import { formatPhoneBR, phoneDigits } from '../../../../lib/phone';
@@ -103,8 +104,17 @@ export function BookingFlow({ slug }: { slug: string }) {
   const [professional, setProfessional] = useState<BookingProfessional | null>(null);
   const [day, setDay] = useState<string | null>(null);
   const [slot, setSlot] = useState<string | null>(null);
-  const [patient, setPatient] = useState({ name: '', phone: '', email: '' });
+  const [patient, setPatient] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    birthDate: '',
+    guardianName: '',
+    guardianPhone: '',
+    guardianRelationship: '',
+  });
   const [consent, setConsent] = useState(false);
+  const patientIsMinor = patient.birthDate ? isMinor(new Date(patient.birthDate)) : false;
 
   const [slots, setSlots] = useState<string[] | null>(null);
   const [slotsError, setSlotsError] = useState<string | null>(null);
@@ -195,6 +205,14 @@ export function BookingFlow({ slug }: { slug: string }) {
             name: patient.name,
             phone: patient.phone,
             ...(patient.email && { email: patient.email }),
+            birthDate: patient.birthDate,
+            ...(patientIsMinor && {
+              guardianName: patient.guardianName,
+              guardianPhone: patient.guardianPhone,
+              ...(patient.guardianRelationship && {
+                guardianRelationship: patient.guardianRelationship,
+              }),
+            }),
           },
           consent: true,
         }),
@@ -475,6 +493,61 @@ export function BookingFlow({ slug }: { slug: string }) {
               className="input-editorial mt-2"
             />
           </label>
+          <label className="block">
+            <span className="kicker">Data de nascimento</span>
+            <input
+              type="date"
+              value={patient.birthDate}
+              onChange={(e) => setPatient({ ...patient, birthDate: e.target.value })}
+              required
+              max={new Date().toISOString().slice(0, 10)}
+              className="input-editorial mt-2"
+            />
+          </label>
+
+          {patientIsMinor && (
+            <fieldset className="border border-[color:var(--color-rule)] p-4 space-y-4">
+              <legend className="kicker px-2">Responsável legal (paciente menor)</legend>
+              <label className="block">
+                <span className="kicker">Nome do responsável</span>
+                <input
+                  value={patient.guardianName}
+                  onChange={(e) => setPatient({ ...patient, guardianName: e.target.value })}
+                  required
+                  minLength={2}
+                  maxLength={120}
+                  className="input-editorial mt-2"
+                />
+              </label>
+              <label className="block">
+                <span className="kicker">Telefone do responsável</span>
+                <input
+                  type="tel"
+                  value={formatPhoneBR(patient.guardianPhone)}
+                  onChange={(e) =>
+                    setPatient({ ...patient, guardianPhone: phoneDigits(e.target.value) })
+                  }
+                  required
+                  minLength={14}
+                  maxLength={16}
+                  placeholder="(11) 99999-0000"
+                  className="input-editorial mt-2"
+                />
+              </label>
+              <label className="block">
+                <span className="kicker">Parentesco (opcional)</span>
+                <input
+                  value={patient.guardianRelationship}
+                  onChange={(e) =>
+                    setPatient({ ...patient, guardianRelationship: e.target.value })
+                  }
+                  maxLength={60}
+                  placeholder="mãe, pai, tutor…"
+                  className="input-editorial mt-2"
+                />
+              </label>
+            </fieldset>
+          )}
           <p className="text-xs text-[color:var(--color-ink-soft)]">
             Se você já é paciente, usaremos seu telefone para reconhecer o cadastro.
           </p>

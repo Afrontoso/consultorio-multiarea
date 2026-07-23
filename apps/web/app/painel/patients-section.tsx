@@ -1,10 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { isMinor } from '@consultorio/contracts';
 import { api, ApiError } from '../../lib/api';
 import type { PatientDetail, PatientItem } from '../../lib/painel-types';
 import { formatTime } from '../../lib/agenda';
 import { formatPhoneBR, phoneDigits } from '../../lib/phone';
+
+/** true se a data (YYYY-MM-DD) indicar menor de 18 anos. */
+function isMinorDay(isoDay: string): boolean {
+  return isoDay ? isMinor(new Date(isoDay)) : false;
+}
 
 const STATUS_LABEL: Record<string, string> = {
   CONFIRMED: 'confirmada',
@@ -14,15 +20,31 @@ const STATUS_LABEL: Record<string, string> = {
   NO_SHOW: 'faltou',
 };
 
-const emptyForm = { name: '', phone: '', email: '', birthDate: '', notes: '' };
+const emptyForm = {
+  name: '',
+  phone: '',
+  email: '',
+  birthDate: '',
+  notes: '',
+  guardianName: '',
+  guardianPhone: '',
+  guardianRelationship: '',
+};
 
 function formPayload(form: typeof emptyForm) {
+  const minor = isMinorDay(form.birthDate);
   return {
     name: form.name,
     phone: form.phone,
     ...(form.email && { email: form.email }),
     ...(form.birthDate && { birthDate: form.birthDate }),
     ...(form.notes && { notes: form.notes }),
+    // Responsável só é enviado quando o paciente é menor.
+    ...(minor && {
+      guardianName: form.guardianName,
+      guardianPhone: form.guardianPhone,
+      ...(form.guardianRelationship && { guardianRelationship: form.guardianRelationship }),
+    }),
   };
 }
 
@@ -69,6 +91,9 @@ export function PatientsSection() {
       email: p.email ?? '',
       birthDate: p.birthDate ? p.birthDate.slice(0, 10) : '',
       notes: p.notes ?? '',
+      guardianName: p.guardianName ?? '',
+      guardianPhone: p.guardianPhone ?? '',
+      guardianRelationship: p.guardianRelationship ?? '',
     });
     setShowForm(true);
     setError(null);
@@ -202,15 +227,62 @@ export function PatientsSection() {
               />
             </label>
             <label className="block">
-              <span className="kicker">Nascimento (opcional)</span>
+              <span className="kicker">Nascimento</span>
               <input
                 type="date"
                 value={form.birthDate}
                 onChange={(e) => setForm({ ...form, birthDate: e.target.value })}
+                required
+                max={new Date().toISOString().slice(0, 10)}
                 className="input-editorial mt-2"
               />
             </label>
           </div>
+
+          {isMinorDay(form.birthDate) && (
+            <fieldset className="border border-[color:var(--color-rule)] p-4 space-y-4">
+              <legend className="kicker px-2">Responsável legal (paciente menor)</legend>
+              <div className="grid grid-cols-2 gap-6">
+                <label className="block">
+                  <span className="kicker">Nome do responsável</span>
+                  <input
+                    value={form.guardianName}
+                    onChange={(e) => setForm({ ...form, guardianName: e.target.value })}
+                    required
+                    minLength={2}
+                    maxLength={120}
+                    className="input-editorial mt-2"
+                  />
+                </label>
+                <label className="block">
+                  <span className="kicker">Telefone do responsável</span>
+                  <input
+                    type="tel"
+                    value={formatPhoneBR(form.guardianPhone)}
+                    onChange={(e) =>
+                      setForm({ ...form, guardianPhone: phoneDigits(e.target.value) })
+                    }
+                    required
+                    minLength={14}
+                    maxLength={16}
+                    placeholder="(11) 99999-0000"
+                    className="input-editorial mt-2"
+                  />
+                </label>
+              </div>
+              <label className="block">
+                <span className="kicker">Parentesco (opcional)</span>
+                <input
+                  value={form.guardianRelationship}
+                  onChange={(e) => setForm({ ...form, guardianRelationship: e.target.value })}
+                  maxLength={60}
+                  placeholder="mãe, pai, tutor…"
+                  className="input-editorial mt-2"
+                />
+              </label>
+            </fieldset>
+          )}
+
           <label className="block">
             <span className="kicker">Anotações (opcional)</span>
             <textarea
@@ -373,6 +445,19 @@ function PatientDetailView({
             label="Nascimento"
             value={new Date(patient.birthDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
           />
+        )}
+        {patient.guardianName && (
+          <Row
+            label="Responsável"
+            value={
+              patient.guardianRelationship
+                ? `${patient.guardianName} (${patient.guardianRelationship})`
+                : patient.guardianName
+            }
+          />
+        )}
+        {patient.guardianPhone && (
+          <Row label="Tel. do responsável" value={formatPhoneBR(patient.guardianPhone)} />
         )}
         <Row
           label="Desde"

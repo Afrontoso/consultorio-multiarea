@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { isMinor } from '@consultorio/contracts';
 import { api, ApiError } from '../../lib/api';
 import type { AppointmentItem, Professional } from '../../lib/painel-types';
 import {
@@ -374,6 +375,10 @@ const emptyForm = {
   patientName: '',
   patientPhone: '',
   patientEmail: '',
+  patientBirthDate: '',
+  guardianName: '',
+  guardianPhone: '',
+  guardianRelationship: '',
   notes: '',
 };
 
@@ -392,6 +397,7 @@ function CreateAppointmentForm({
 
   const professional = professionals.find((p) => p.id === form.professionalId);
   const services = professional?.services ?? [];
+  const patientIsMinor = form.patientBirthDate ? isMinor(new Date(form.patientBirthDate)) : false;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -408,6 +414,12 @@ function CreateAppointmentForm({
             name: form.patientName,
             phone: form.patientPhone,
             ...(form.patientEmail && { email: form.patientEmail }),
+            birthDate: form.patientBirthDate,
+            ...(patientIsMinor && {
+              guardianName: form.guardianName,
+              guardianPhone: form.guardianPhone,
+              ...(form.guardianRelationship && { guardianRelationship: form.guardianRelationship }),
+            }),
           },
           ...(form.notes && { notes: form.notes }),
         }),
@@ -505,16 +517,71 @@ function CreateAppointmentForm({
         Se o telefone já for de um paciente cadastrado, a consulta entra na ficha dele.
       </p>
 
-      <label className="block">
-        <span className="kicker">Email (opcional)</span>
-        <input
-          type="email"
-          value={form.patientEmail}
-          onChange={(e) => setForm({ ...form, patientEmail: e.target.value })}
-          maxLength={254}
-          className="input-editorial mt-2"
-        />
-      </label>
+      <div className="grid grid-cols-2 gap-6">
+        <label className="block">
+          <span className="kicker">Email (opcional)</span>
+          <input
+            type="email"
+            value={form.patientEmail}
+            onChange={(e) => setForm({ ...form, patientEmail: e.target.value })}
+            maxLength={254}
+            className="input-editorial mt-2"
+          />
+        </label>
+        <label className="block">
+          <span className="kicker">Nascimento</span>
+          <input
+            type="date"
+            value={form.patientBirthDate}
+            onChange={(e) => setForm({ ...form, patientBirthDate: e.target.value })}
+            required
+            max={new Date().toISOString().slice(0, 10)}
+            className="input-editorial mt-2"
+          />
+        </label>
+      </div>
+
+      {patientIsMinor && (
+        <fieldset className="border border-[color:var(--color-rule)] p-4 space-y-4">
+          <legend className="kicker px-2">Responsável legal (paciente menor)</legend>
+          <div className="grid grid-cols-2 gap-6">
+            <label className="block">
+              <span className="kicker">Nome do responsável</span>
+              <input
+                value={form.guardianName}
+                onChange={(e) => setForm({ ...form, guardianName: e.target.value })}
+                required
+                minLength={2}
+                maxLength={120}
+                className="input-editorial mt-2"
+              />
+            </label>
+            <label className="block">
+              <span className="kicker">Telefone do responsável</span>
+              <input
+                type="tel"
+                value={formatPhoneBR(form.guardianPhone)}
+                onChange={(e) => setForm({ ...form, guardianPhone: phoneDigits(e.target.value) })}
+                required
+                minLength={14}
+                maxLength={16}
+                placeholder="(11) 99999-0000"
+                className="input-editorial mt-2"
+              />
+            </label>
+          </div>
+          <label className="block">
+            <span className="kicker">Parentesco (opcional)</span>
+            <input
+              value={form.guardianRelationship}
+              onChange={(e) => setForm({ ...form, guardianRelationship: e.target.value })}
+              maxLength={60}
+              placeholder="mãe, pai, tutor…"
+              className="input-editorial mt-2"
+            />
+          </label>
+        </fieldset>
+      )}
 
       <label className="block">
         <span className="kicker">Observações (opcional)</span>

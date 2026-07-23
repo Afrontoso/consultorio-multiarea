@@ -28,6 +28,9 @@ const SELECT = {
   phone: true,
   birthDate: true,
   notes: true,
+  guardianName: true,
+  guardianPhone: true,
+  guardianRelationship: true,
   createdAt: true,
   user: { select: { id: true } },
 } as const;

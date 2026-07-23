@@ -141,6 +141,11 @@ model Patient {
   // Consentimento (LGPD): quando o titular aceitou os termos e qual versão.
   consentAt      DateTime?
   consentVersion String?
+  // Responsável legal (paciente menor de 18 anos). Texto claro: dados de
+  // contato, exigidos quando birthDate indicar menor (ver contracts).
+  guardianName         String?
+  guardianPhone        String?
+  guardianRelationship String?
   deletedAt DateTime? // soft-delete (LGPD); purge definitivo via script (30 dias)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt

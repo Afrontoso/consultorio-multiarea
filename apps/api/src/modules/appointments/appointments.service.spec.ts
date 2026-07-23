@@ -1,5 +1,6 @@
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { AppointmentsService, monthWindowUtc } from './appointments.service';
+import { decryptField } from '../../common/crypto/field-crypto';
 
 type PrismaMock = {
   tenant: { findUniqueOrThrow: jest.Mock };
@@ -45,7 +46,11 @@ const baseInput = {
   date: new Date('2026-07-13T12:00:00Z'),
   professionalId: 'prof-1',
   serviceId: 'svc-1',
-  patient: { name: 'Paciente Teste', phone: '11999990000' },
+  patient: {
+    name: 'Paciente Teste',
+    phone: '11999990000',
+    birthDate: new Date('1990-01-01T00:00:00.000Z'),
+  },
 };
 
 function happyPathMocks(prisma: PrismaMock) {
@@ -111,6 +116,33 @@ describe('AppointmentsService', () => {
           }),
         }),
       );
+    });
+
+    it('cifra birthDate e grava responsável ao criar menor inline', async () => {
+      happyPathMocks(prisma);
+
+      await service.create('t-1', {
+        ...baseInput,
+        patient: {
+          name: 'João Junior',
+          phone: '11988887777',
+          birthDate: new Date('2015-03-01T00:00:00.000Z'),
+          guardianName: 'Maria Mãe',
+          guardianPhone: '11999990000',
+          guardianRelationship: 'mãe',
+        },
+      });
+
+      const arg = prisma.patient.upsert.mock.calls[0][0];
+      expect(arg.create.birthDate).toMatch(/^v1:/);
+      expect(new Date(decryptField(arg.create.birthDate)).toISOString()).toBe(
+        '2015-03-01T00:00:00.000Z',
+      );
+      expect(arg.create).toMatchObject({
+        guardianName: 'Maria Mãe',
+        guardianPhone: '11999990000',
+        guardianRelationship: 'mãe',
+      });
     });
 
     it('dispara email de confirmação após criar', async () => {

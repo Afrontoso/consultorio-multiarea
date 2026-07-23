@@ -46,7 +46,12 @@ function buildPrismaMock(): PrismaMock {
   };
 }
 
-const input = { name: 'Maria da Silva', phone: '11999990000' };
+// Adulto (birthDate obrigatório desde a #27): não exige responsável.
+const input = {
+  name: 'Maria da Silva',
+  phone: '11999990000',
+  birthDate: new Date('1990-01-01T00:00:00.000Z'),
+};
 
 describe('PatientsService', () => {
   let prisma: PrismaMock;
@@ -85,9 +90,8 @@ describe('PatientsService', () => {
 
       await service.create('t-1', input);
 
-      expect(prisma.patient.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { ...input, tenantId: 't-1' } }),
-      );
+      const data = prisma.patient.create.mock.calls[0][0].data;
+      expect(data).toMatchObject({ name: input.name, phone: input.phone, tenantId: 't-1' });
     });
 
     it('cifra notes/birthDate e registra consentimento ao criar', async () => {
@@ -113,6 +117,27 @@ describe('PatientsService', () => {
       expect(data.consentVersion).toBe(TERMS_VERSION);
     });
 
+    it('repassa os dados do responsável ao criar paciente menor', async () => {
+      prisma.patient.findUnique.mockResolvedValue(null);
+      prisma.patient.create.mockResolvedValue({ id: 'pat-1' });
+
+      await service.create('t-1', {
+        name: 'João Junior',
+        phone: '11988887777',
+        birthDate: new Date('2015-03-01T00:00:00.000Z'),
+        guardianName: 'Maria Mãe',
+        guardianPhone: '11999990000',
+        guardianRelationship: 'mãe',
+      });
+
+      const data = prisma.patient.create.mock.calls[0][0].data;
+      expect(data).toMatchObject({
+        guardianName: 'Maria Mãe',
+        guardianPhone: '11999990000',
+        guardianRelationship: 'mãe',
+      });
+    });
+
     it('409 se o telefone já pertence a paciente ativo', async () => {
       prisma.patient.findUnique.mockResolvedValue({ id: 'pat-1', deletedAt: null });
 
@@ -125,12 +150,9 @@ describe('PatientsService', () => {
 
       await service.create('t-1', input);
 
-      expect(prisma.patient.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'pat-1' },
-          data: { ...input, deletedAt: null },
-        }),
-      );
+      const call = prisma.patient.update.mock.calls[0][0];
+      expect(call.where).toEqual({ id: 'pat-1' });
+      expect(call.data).toMatchObject({ name: input.name, deletedAt: null });
     });
   });
 
