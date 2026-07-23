@@ -19,7 +19,12 @@ import {
   toDatetimeLocal,
 } from '../../lib/agenda';
 import { formatPhoneBR, phoneDigits } from '../../lib/phone';
-import { GuardianRelationshipField } from '../../components/guardian-relationship-field';
+import {
+  GuardiansField,
+  guardiansPayload,
+  emptyGuardian,
+  type GuardianForm,
+} from '../../components/guardians-field';
 import { BlocksView } from './blocks-view';
 import { WorkingHoursView } from './working-hours-view';
 
@@ -377,9 +382,7 @@ const emptyForm = {
   patientPhone: '',
   patientEmail: '',
   patientBirthDate: '',
-  guardianName: '',
-  guardianPhone: '',
-  guardianRelationship: '',
+  guardians: [emptyGuardian] as GuardianForm[],
   notes: '',
 };
 
@@ -416,11 +419,7 @@ function CreateAppointmentForm({
             phone: form.patientPhone,
             ...(form.patientEmail && { email: form.patientEmail }),
             birthDate: form.patientBirthDate,
-            ...(patientIsMinor && {
-              guardianName: form.guardianName,
-              guardianPhone: form.guardianPhone,
-              ...(form.guardianRelationship && { guardianRelationship: form.guardianRelationship }),
-            }),
+            ...(patientIsMinor && { guardians: guardiansPayload(form.guardians) }),
           },
           ...(form.notes && { notes: form.notes }),
         }),
@@ -543,39 +542,10 @@ function CreateAppointmentForm({
       </div>
 
       {patientIsMinor && (
-        <fieldset className="border border-[color:var(--color-rule)] p-4 space-y-4">
-          <legend className="kicker px-2">Responsável legal (paciente menor)</legend>
-          <div className="grid grid-cols-2 gap-6">
-            <label className="block">
-              <span className="kicker">Nome do responsável</span>
-              <input
-                value={form.guardianName}
-                onChange={(e) => setForm({ ...form, guardianName: e.target.value })}
-                required
-                minLength={2}
-                maxLength={120}
-                className="input-editorial mt-2"
-              />
-            </label>
-            <label className="block">
-              <span className="kicker">Telefone do responsável</span>
-              <input
-                type="tel"
-                value={formatPhoneBR(form.guardianPhone)}
-                onChange={(e) => setForm({ ...form, guardianPhone: phoneDigits(e.target.value) })}
-                required
-                minLength={14}
-                maxLength={16}
-                placeholder="(11) 99999-0000"
-                className="input-editorial mt-2"
-              />
-            </label>
-          </div>
-          <GuardianRelationshipField
-            value={form.guardianRelationship}
-            onChange={(v) => setForm({ ...form, guardianRelationship: v })}
-          />
-        </fieldset>
+        <GuardiansField
+          value={form.guardians}
+          onChange={(guardians) => setForm({ ...form, guardians })}
+        />
       )}
 
       <label className="block">

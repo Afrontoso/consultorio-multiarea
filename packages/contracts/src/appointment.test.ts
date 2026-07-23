@@ -96,16 +96,15 @@ describe('PublicCreateAppointmentSchema', () => {
     ).toThrow();
   });
 
-  it('accepts minor patient with guardian name + phone', () => {
+  it('accepts minor patient with one guardian', () => {
     const parsed = PublicCreateAppointmentSchema.parse({
       ...publicValid,
       patient: {
         ...publicValid.patient,
         birthDate: minorBirthDate,
-        guardianName: 'Maria Mãe',
-        guardianPhone: '11988887777',
+        guardians: [{ name: 'Maria Mãe', phone: '11988887777' }],
       },
     });
-    expect(parsed.patient.guardianName).toBe('Maria Mãe');
+    expect(parsed.patient.guardians?.[0]?.name).toBe('Maria Mãe');
   });
 });

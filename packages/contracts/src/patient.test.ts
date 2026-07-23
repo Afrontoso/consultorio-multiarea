@@ -44,30 +44,47 @@ describe('CreatePatientSchema', () => {
     expect(() => CreatePatientSchema.parse(withoutBirth)).toThrow();
   });
 
-  describe('responsável legal (menor)', () => {
+  describe('responsáveis legais (menor)', () => {
     it('menor sem responsável → rejeita', () => {
       expect(() => CreatePatientSchema.parse({ ...valid, birthDate: minorBirthDate })).toThrow();
     });
 
-    it('menor sem telefone do responsável → rejeita', () => {
+    it('menor com lista de responsáveis vazia → rejeita', () => {
+      expect(() =>
+        CreatePatientSchema.parse({ ...valid, birthDate: minorBirthDate, guardians: [] }),
+      ).toThrow();
+    });
+
+    it('responsável sem telefone → rejeita (GuardianSchema)', () => {
       expect(() =>
         CreatePatientSchema.parse({
           ...valid,
           birthDate: minorBirthDate,
-          guardianName: 'Maria Mãe',
+          guardians: [{ name: 'Maria Mãe' }],
         }),
       ).toThrow();
     });
 
-    it('menor com nome + telefone do responsável → aceita', () => {
+    it('menor com um responsável completo → aceita', () => {
       const parsed = CreatePatientSchema.parse({
         ...valid,
         birthDate: minorBirthDate,
-        guardianName: 'Maria Mãe',
-        guardianPhone: '11988887777',
+        guardians: [{ name: 'Maria Mãe', phone: '11988887777', relationship: 'mãe' }],
       });
-      expect(parsed.guardianName).toBe('Maria Mãe');
-      expect(parsed.guardianPhone).toBe('11988887777');
+      expect(parsed.guardians?.[0]?.name).toBe('Maria Mãe');
+      expect(parsed.guardians?.[0]?.phone).toBe('11988887777');
+    });
+
+    it('menor com vários responsáveis → aceita', () => {
+      const parsed = CreatePatientSchema.parse({
+        ...valid,
+        birthDate: minorBirthDate,
+        guardians: [
+          { name: 'Maria Mãe', phone: '11988887777' },
+          { name: 'João Pai', phone: '11977776666', relationship: 'pai' },
+        ],
+      });
+      expect(parsed.guardians).toHaveLength(2);
     });
 
     it('adulto não precisa de responsável', () => {

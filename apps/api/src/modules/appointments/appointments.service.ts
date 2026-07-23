@@ -11,6 +11,7 @@ import {
   type ListAppointmentsQuery,
   type UpdateAppointmentInput,
 } from '@consultorio/contracts';
+import { Prisma } from '@consultorio/db';
 import { PrismaService, type TenantTx } from '../prisma/prisma.service';
 import { encryptField } from '../../common/crypto/field-crypto';
 import { DEFAULT_UTC_OFFSET_MINUTES } from '../availability/slots';
@@ -338,19 +339,18 @@ export class AppointmentsService {
       input.consent === true
         ? { consentAt: new Date(), consentVersion: TERMS_VERSION }
         : {};
-    const { name, phone, email, birthDate, guardianName, guardianPhone, guardianRelationship } =
-      input.patient;
+    const { name, phone, email, birthDate, guardians } = input.patient;
     // birthDate é campo cifrado (mesmo tratamento do cadastro pelo painel);
-    // os dados do responsável vão em texto claro.
+    // a lista de responsáveis vai em texto claro (Json).
     const encryptedBirthDate = encryptField(new Date(birthDate).toISOString());
-    const guardian = { guardianName, guardianPhone, guardianRelationship };
+    const guardiansData = (guardians ?? []) as Prisma.InputJsonValue;
     const patient = await tx.patient.upsert({
       where: { tenantId_phone: { tenantId, phone } },
       update: {
         name,
         email,
         birthDate: encryptedBirthDate,
-        ...guardian,
+        guardians: guardiansData,
         deletedAt: null,
         ...consentData,
       },
@@ -359,7 +359,7 @@ export class AppointmentsService {
         phone,
         email,
         birthDate: encryptedBirthDate,
-        ...guardian,
+        guardians: guardiansData,
         tenantId,
         ...consentData,
       },

@@ -208,11 +208,15 @@ export function BookingFlow({ slug }: { slug: string }) {
             ...(patient.email && { email: patient.email }),
             birthDate: patient.birthDate,
             ...(patientIsMinor && {
-              guardianName: patient.guardianName,
-              guardianPhone: patient.guardianPhone,
-              ...(patient.guardianRelationship && {
-                guardianRelationship: patient.guardianRelationship,
-              }),
+              guardians: [
+                {
+                  name: patient.guardianName,
+                  phone: patient.guardianPhone,
+                  ...(patient.guardianRelationship && {
+                    relationship: patient.guardianRelationship,
+                  }),
+                },
+              ],
             }),
           },
           consent: true,

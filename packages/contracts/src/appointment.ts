@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { GuardianFields, minorGuardianRefine, PhoneSchema } from './patient';
+import { guardiansField, minorGuardianRefine, PhoneSchema } from './patient';
 
 export const AppointmentStatusSchema = z.enum([
   'CONFIRMED',
@@ -18,7 +18,7 @@ export const InlinePatientSchema = z
     phone: PhoneSchema,
     email: z.string().email().optional(),
     birthDate: z.coerce.date(),
-    ...GuardianFields,
+    guardians: guardiansField,
   })
   .superRefine(minorGuardianRefine);
 export type InlinePatientInput = z.infer<typeof InlinePatientSchema>;

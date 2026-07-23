@@ -12,36 +12,32 @@ export const PhoneSchema = z
     z.string().regex(/^\d{10,15}$/, 'Telefone inválido: informe DDD + número (10 a 15 dígitos)'),
   );
 
-// Campos do responsável legal, reutilizados no cadastro (painel) e no
-// agendamento inline (público/painel). Todos opcionais no schema; a
-// obrigatoriedade para menores é imposta pelo refine abaixo.
-export const GuardianFields = {
-  guardianName: z.string().min(2).max(120).optional(),
-  guardianPhone: PhoneSchema.optional(),
-  guardianRelationship: z.string().max(60).optional(),
-};
+// Um responsável legal. Nome e telefone obrigatórios; parentesco opcional.
+export const GuardianSchema = z.object({
+  name: z.string().min(2).max(120),
+  phone: PhoneSchema,
+  relationship: z.string().max(60).optional(),
+});
+export type GuardianInput = z.infer<typeof GuardianSchema>;
+
+// Lista de responsáveis. Cada item é validado por GuardianSchema; a
+// obrigatoriedade de ao menos um para menores é imposta pelo refine.
+export const guardiansField = z.array(GuardianSchema).max(10).optional();
 
 /**
- * Se a data de nascimento indicar menor de idade, exige nome e telefone do
+ * Se a data de nascimento indicar menor de idade, exige pelo menos um
  * responsável legal. Usado via `.superRefine` em todos os schemas de paciente.
  */
 export function minorGuardianRefine(
-  data: { birthDate?: Date; guardianName?: string; guardianPhone?: string },
+  data: { birthDate?: Date; guardians?: GuardianInput[] },
   ctx: z.RefinementCtx,
 ): void {
   if (!data.birthDate || !isMinor(data.birthDate)) return;
-  if (!data.guardianName) {
+  if (!data.guardians || data.guardians.length === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ['guardianName'],
-      message: 'Paciente menor de idade: informe o nome do responsável legal.',
-    });
-  }
-  if (!data.guardianPhone) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['guardianPhone'],
-      message: 'Paciente menor de idade: informe o telefone do responsável legal.',
+      path: ['guardians'],
+      message: 'Paciente menor de idade: informe pelo menos um responsável legal.',
     });
   }
 }
@@ -54,7 +50,7 @@ const patientBase = z.object({
   // Consentimento coletado do paciente (LGPD). No cadastro pelo painel, o
   // staff atesta o aceite; o servidor grava consentAt + versão dos termos.
   consent: z.boolean().optional(),
-  ...GuardianFields,
+  guardians: guardiansField,
 });
 
 // birthDate obrigatório no cadastro: sem ele não dá pra calcular maioridade

@@ -117,25 +117,23 @@ describe('PatientsService', () => {
       expect(data.consentVersion).toBe(TERMS_VERSION);
     });
 
-    it('repassa os dados do responsável ao criar paciente menor', async () => {
+    it('repassa a lista de responsáveis ao criar paciente menor', async () => {
       prisma.patient.findUnique.mockResolvedValue(null);
       prisma.patient.create.mockResolvedValue({ id: 'pat-1' });
 
+      const guardians = [
+        { name: 'Maria Mãe', phone: '11999990000', relationship: 'mãe' },
+        { name: 'João Pai', phone: '11977776666' },
+      ];
       await service.create('t-1', {
         name: 'João Junior',
         phone: '11988887777',
         birthDate: new Date('2015-03-01T00:00:00.000Z'),
-        guardianName: 'Maria Mãe',
-        guardianPhone: '11999990000',
-        guardianRelationship: 'mãe',
+        guardians,
       });
 
       const data = prisma.patient.create.mock.calls[0][0].data;
-      expect(data).toMatchObject({
-        guardianName: 'Maria Mãe',
-        guardianPhone: '11999990000',
-        guardianRelationship: 'mãe',
-      });
+      expect(data.guardians).toEqual(guardians);
     });
 
     it('409 se o telefone já pertence a paciente ativo', async () => {

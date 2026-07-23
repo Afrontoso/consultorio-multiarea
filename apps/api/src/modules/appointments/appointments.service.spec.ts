@@ -118,18 +118,17 @@ describe('AppointmentsService', () => {
       );
     });
 
-    it('cifra birthDate e grava responsável ao criar menor inline', async () => {
+    it('cifra birthDate e grava responsáveis ao criar menor inline', async () => {
       happyPathMocks(prisma);
 
+      const guardians = [{ name: 'Maria Mãe', phone: '11999990000', relationship: 'mãe' }];
       await service.create('t-1', {
         ...baseInput,
         patient: {
           name: 'João Junior',
           phone: '11988887777',
           birthDate: new Date('2015-03-01T00:00:00.000Z'),
-          guardianName: 'Maria Mãe',
-          guardianPhone: '11999990000',
-          guardianRelationship: 'mãe',
+          guardians,
         },
       });
 
@@ -138,11 +137,7 @@ describe('AppointmentsService', () => {
       expect(new Date(decryptField(arg.create.birthDate)).toISOString()).toBe(
         '2015-03-01T00:00:00.000Z',
       );
-      expect(arg.create).toMatchObject({
-        guardianName: 'Maria Mãe',
-        guardianPhone: '11999990000',
-        guardianRelationship: 'mãe',
-      });
+      expect(arg.create.guardians).toEqual(guardians);
     });
 
     it('dispara email de confirmação após criar', async () => {

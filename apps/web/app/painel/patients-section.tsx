@@ -6,7 +6,12 @@ import { api, ApiError } from '../../lib/api';
 import type { PatientDetail, PatientItem } from '../../lib/painel-types';
 import { formatTime } from '../../lib/agenda';
 import { formatPhoneBR, phoneDigits } from '../../lib/phone';
-import { GuardianRelationshipField } from '../../components/guardian-relationship-field';
+import {
+  GuardiansField,
+  guardiansPayload,
+  emptyGuardian,
+  type GuardianForm,
+} from '../../components/guardians-field';
 
 /** true se a data (YYYY-MM-DD) indicar menor de 18 anos. */
 function isMinorDay(isoDay: string): boolean {
@@ -27,9 +32,7 @@ const emptyForm = {
   email: '',
   birthDate: '',
   notes: '',
-  guardianName: '',
-  guardianPhone: '',
-  guardianRelationship: '',
+  guardians: [emptyGuardian] as GuardianForm[],
 };
 
 function formPayload(form: typeof emptyForm) {
@@ -40,12 +43,8 @@ function formPayload(form: typeof emptyForm) {
     ...(form.email && { email: form.email }),
     ...(form.birthDate && { birthDate: form.birthDate }),
     ...(form.notes && { notes: form.notes }),
-    // Responsável só é enviado quando o paciente é menor.
-    ...(minor && {
-      guardianName: form.guardianName,
-      guardianPhone: form.guardianPhone,
-      ...(form.guardianRelationship && { guardianRelationship: form.guardianRelationship }),
-    }),
+    // Responsáveis só são enviados quando o paciente é menor.
+    ...(minor && { guardians: guardiansPayload(form.guardians) }),
   };
 }
 
@@ -92,9 +91,14 @@ export function PatientsSection() {
       email: p.email ?? '',
       birthDate: p.birthDate ? p.birthDate.slice(0, 10) : '',
       notes: p.notes ?? '',
-      guardianName: p.guardianName ?? '',
-      guardianPhone: p.guardianPhone ?? '',
-      guardianRelationship: p.guardianRelationship ?? '',
+      guardians:
+        p.guardians && p.guardians.length
+          ? p.guardians.map((g) => ({
+              name: g.name,
+              phone: g.phone,
+              relationship: g.relationship ?? '',
+            }))
+          : [emptyGuardian],
     });
     setShowForm(true);
     setError(null);
@@ -241,41 +245,10 @@ export function PatientsSection() {
           </div>
 
           {isMinorDay(form.birthDate) && (
-            <fieldset className="border border-[color:var(--color-rule)] p-4 space-y-4">
-              <legend className="kicker px-2">Responsável legal (paciente menor)</legend>
-              <div className="grid grid-cols-2 gap-6">
-                <label className="block">
-                  <span className="kicker">Nome do responsável</span>
-                  <input
-                    value={form.guardianName}
-                    onChange={(e) => setForm({ ...form, guardianName: e.target.value })}
-                    required
-                    minLength={2}
-                    maxLength={120}
-                    className="input-editorial mt-2"
-                  />
-                </label>
-                <label className="block">
-                  <span className="kicker">Telefone do responsável</span>
-                  <input
-                    type="tel"
-                    value={formatPhoneBR(form.guardianPhone)}
-                    onChange={(e) =>
-                      setForm({ ...form, guardianPhone: phoneDigits(e.target.value) })
-                    }
-                    required
-                    minLength={14}
-                    maxLength={16}
-                    placeholder="(11) 99999-0000"
-                    className="input-editorial mt-2"
-                  />
-                </label>
-              </div>
-              <GuardianRelationshipField
-                value={form.guardianRelationship}
-                onChange={(v) => setForm({ ...form, guardianRelationship: v })}
-              />
-            </fieldset>
+            <GuardiansField
+              value={form.guardians}
+              onChange={(guardians) => setForm({ ...form, guardians })}
+            />
           )}
 
           <label className="block">
@@ -441,19 +414,13 @@ function PatientDetailView({
             value={new Date(patient.birthDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
           />
         )}
-        {patient.guardianName && (
+        {patient.guardians?.map((g, i) => (
           <Row
-            label="Responsável"
-            value={
-              patient.guardianRelationship
-                ? `${patient.guardianName} (${patient.guardianRelationship})`
-                : patient.guardianName
-            }
+            key={i}
+            label={patient.guardians.length > 1 ? `Responsável ${i + 1}` : 'Responsável'}
+            value={`${g.relationship ? `${g.name} (${g.relationship})` : g.name} · ${formatPhoneBR(g.phone)}`}
           />
-        )}
-        {patient.guardianPhone && (
-          <Row label="Tel. do responsável" value={formatPhoneBR(patient.guardianPhone)} />
-        )}
+        ))}
         <Row
           label="Desde"
           value={new Date(patient.createdAt).toLocaleDateString('pt-BR')}
