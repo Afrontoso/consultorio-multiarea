@@ -19,6 +19,7 @@ import {
   toDatetimeLocal,
 } from '../../lib/agenda';
 import { formatPhoneBR, phoneDigits } from '../../lib/phone';
+import { GuardianRelationshipField } from '../../components/guardian-relationship-field';
 import { BlocksView } from './blocks-view';
 import { WorkingHoursView } from './working-hours-view';
 
@@ -570,16 +571,10 @@ function CreateAppointmentForm({
               />
             </label>
           </div>
-          <label className="block">
-            <span className="kicker">Parentesco (opcional)</span>
-            <input
-              value={form.guardianRelationship}
-              onChange={(e) => setForm({ ...form, guardianRelationship: e.target.value })}
-              maxLength={60}
-              placeholder="mãe, pai, tutor…"
-              className="input-editorial mt-2"
-            />
-          </label>
+          <GuardianRelationshipField
+            value={form.guardianRelationship}
+            onChange={(v) => setForm({ ...form, guardianRelationship: v })}
+          />
         </fieldset>
       )}
 

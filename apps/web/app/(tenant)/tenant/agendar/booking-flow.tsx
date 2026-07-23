@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { isMinor } from '@consultorio/contracts';
+import { GuardianRelationshipField } from '../../../../components/guardian-relationship-field';
 import { api, ApiError } from '../../../../lib/api';
 import { formatBRL } from '../../../../lib/money';
 import { formatPhoneBR, phoneDigits } from '../../../../lib/phone';
@@ -534,18 +535,10 @@ export function BookingFlow({ slug }: { slug: string }) {
                   className="input-editorial mt-2"
                 />
               </label>
-              <label className="block">
-                <span className="kicker">Parentesco (opcional)</span>
-                <input
-                  value={patient.guardianRelationship}
-                  onChange={(e) =>
-                    setPatient({ ...patient, guardianRelationship: e.target.value })
-                  }
-                  maxLength={60}
-                  placeholder="mãe, pai, tutor…"
-                  className="input-editorial mt-2"
-                />
-              </label>
+              <GuardianRelationshipField
+                value={patient.guardianRelationship}
+                onChange={(v) => setPatient({ ...patient, guardianRelationship: v })}
+              />
             </fieldset>
           )}
           <p className="text-xs text-[color:var(--color-ink-soft)]">
