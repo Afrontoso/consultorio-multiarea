@@ -55,6 +55,12 @@ export interface ScheduleBlockItem {
   reason: string | null;
 }
 
+export interface Guardian {
+  name: string;
+  phone: string;
+  relationship?: string;
+}
+
 export interface PatientItem {
   id: string;
   name: string;
@@ -62,6 +68,7 @@ export interface PatientItem {
   phone: string;
   birthDate: string | null;
   notes: string | null;
+  guardians: Guardian[];
   createdAt: string;
   user: { id: string } | null;
 }

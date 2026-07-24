@@ -53,11 +53,15 @@ describe('CreateAppointmentSchema', () => {
 });
 
 describe('PublicCreateAppointmentSchema', () => {
+  const minorBirthDate = new Date(Date.now() - 10 * 365 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
   const publicValid = {
     date: '2026-05-01T14:00:00Z',
     professionalId: cuid,
     serviceId: cuid,
-    patient: { name: 'Maria da Silva', phone: '11999990000' },
+    patient: { name: 'Maria da Silva', phone: '11999990000', birthDate: '1990-05-12' },
     consent: true,
   };
 
@@ -74,5 +78,33 @@ describe('PublicCreateAppointmentSchema', () => {
     expect(() =>
       PublicCreateAppointmentSchema.parse({ ...publicValid, consent: false }),
     ).toThrow();
+  });
+
+  it('rejects when patient birthDate is missing', () => {
+    const { birthDate: _omit, ...patientNoBirth } = publicValid.patient;
+    expect(() =>
+      PublicCreateAppointmentSchema.parse({ ...publicValid, patient: patientNoBirth }),
+    ).toThrow();
+  });
+
+  it('rejects minor patient without guardian', () => {
+    expect(() =>
+      PublicCreateAppointmentSchema.parse({
+        ...publicValid,
+        patient: { ...publicValid.patient, birthDate: minorBirthDate },
+      }),
+    ).toThrow();
+  });
+
+  it('accepts minor patient with one guardian', () => {
+    const parsed = PublicCreateAppointmentSchema.parse({
+      ...publicValid,
+      patient: {
+        ...publicValid.patient,
+        birthDate: minorBirthDate,
+        guardians: [{ name: 'Maria Mãe', phone: '11988887777' }],
+      },
+    });
+    expect(parsed.patient.guardians?.[0]?.name).toBe('Maria Mãe');
   });
 });

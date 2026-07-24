@@ -1,10 +1,22 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { isMinor } from '@consultorio/contracts';
 import { api, ApiError } from '../../lib/api';
 import type { PatientDetail, PatientItem } from '../../lib/painel-types';
 import { formatTime } from '../../lib/agenda';
 import { formatPhoneBR, phoneDigits } from '../../lib/phone';
+import {
+  GuardiansField,
+  guardiansPayload,
+  emptyGuardian,
+  type GuardianForm,
+} from '../../components/guardians-field';
+
+/** true se a data (YYYY-MM-DD) indicar menor de 18 anos. */
+function isMinorDay(isoDay: string): boolean {
+  return isoDay ? isMinor(new Date(isoDay)) : false;
+}
 
 const STATUS_LABEL: Record<string, string> = {
   CONFIRMED: 'confirmada',
@@ -14,15 +26,25 @@ const STATUS_LABEL: Record<string, string> = {
   NO_SHOW: 'faltou',
 };
 
-const emptyForm = { name: '', phone: '', email: '', birthDate: '', notes: '' };
+const emptyForm = {
+  name: '',
+  phone: '',
+  email: '',
+  birthDate: '',
+  notes: '',
+  guardians: [emptyGuardian] as GuardianForm[],
+};
 
 function formPayload(form: typeof emptyForm) {
+  const minor = isMinorDay(form.birthDate);
   return {
     name: form.name,
     phone: form.phone,
     ...(form.email && { email: form.email }),
     ...(form.birthDate && { birthDate: form.birthDate }),
     ...(form.notes && { notes: form.notes }),
+    // Responsáveis só são enviados quando o paciente é menor.
+    ...(minor && { guardians: guardiansPayload(form.guardians) }),
   };
 }
 
@@ -69,6 +91,14 @@ export function PatientsSection() {
       email: p.email ?? '',
       birthDate: p.birthDate ? p.birthDate.slice(0, 10) : '',
       notes: p.notes ?? '',
+      guardians:
+        p.guardians && p.guardians.length
+          ? p.guardians.map((g) => ({
+              name: g.name,
+              phone: g.phone,
+              relationship: g.relationship ?? '',
+            }))
+          : [emptyGuardian],
     });
     setShowForm(true);
     setError(null);
@@ -202,15 +232,25 @@ export function PatientsSection() {
               />
             </label>
             <label className="block">
-              <span className="kicker">Nascimento (opcional)</span>
+              <span className="kicker">Nascimento</span>
               <input
                 type="date"
                 value={form.birthDate}
                 onChange={(e) => setForm({ ...form, birthDate: e.target.value })}
+                required
+                max={new Date().toISOString().slice(0, 10)}
                 className="input-editorial mt-2"
               />
             </label>
           </div>
+
+          {isMinorDay(form.birthDate) && (
+            <GuardiansField
+              value={form.guardians}
+              onChange={(guardians) => setForm({ ...form, guardians })}
+            />
+          )}
+
           <label className="block">
             <span className="kicker">Anotações (opcional)</span>
             <textarea
@@ -374,6 +414,13 @@ function PatientDetailView({
             value={new Date(patient.birthDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
           />
         )}
+        {patient.guardians?.map((g, i) => (
+          <Row
+            key={i}
+            label={patient.guardians.length > 1 ? `Responsável ${i + 1}` : 'Responsável'}
+            value={`${g.relationship ? `${g.name} (${g.relationship})` : g.name} · ${formatPhoneBR(g.phone)}`}
+          />
+        ))}
         <Row
           label="Desde"
           value={new Date(patient.createdAt).toLocaleDateString('pt-BR')}

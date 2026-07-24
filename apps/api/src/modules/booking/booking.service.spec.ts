@@ -158,7 +158,11 @@ describe('BookingService', () => {
       date: new Date('2026-07-20T13:00:00Z'),
       professionalId: 'prof-1',
       serviceId: 'svc-1',
-      patient: { name: 'Paciente Teste', phone: '11999990000' },
+      patient: {
+        name: 'Paciente Teste',
+        phone: '11999990000',
+        birthDate: new Date('1990-01-01T00:00:00.000Z'),
+      },
       consent: true as const,
     };
 

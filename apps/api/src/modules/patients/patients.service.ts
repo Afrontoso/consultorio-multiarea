@@ -8,6 +8,7 @@ import { getAuth } from 'firebase-admin/auth';
 import {
   TERMS_VERSION,
   type CreatePatientInput,
+  type GuardianInput,
   type ListPatientsQuery,
   type UpdatePatientInput,
 } from '@consultorio/contracts';
@@ -28,6 +29,7 @@ const SELECT = {
   phone: true,
   birthDate: true,
   notes: true,
+  guardians: true,
   createdAt: true,
   user: { select: { id: true } },
 } as const;
@@ -40,11 +42,16 @@ type PatientWrite = CreatePatientInput | UpdatePatientInput;
  * chaves presentes no input (seguro para create e para update parcial).
  */
 function toWriteData(input: PatientWrite): Prisma.PatientUncheckedUpdateInput {
-  const { consent, birthDate, notes, ...rest } = input;
+  const { consent, birthDate, notes, guardians, ...rest } = input;
   const data: Prisma.PatientUncheckedUpdateInput = { ...rest };
   if ('notes' in input) data.notes = encryptOptional(notes ?? null);
   if ('birthDate' in input) {
     data.birthDate = birthDate ? encryptField(new Date(birthDate).toISOString()) : null;
+  }
+  // Responsáveis: lista em texto claro (Json). Ausência → não mexe; presença
+  // (mesmo vazia) sobrescreve.
+  if (guardians !== undefined) {
+    data.guardians = guardians as Prisma.InputJsonValue;
   }
   if (consent === true) {
     data.consentAt = new Date();
@@ -53,20 +60,55 @@ function toWriteData(input: PatientWrite): Prisma.PatientUncheckedUpdateInput {
   return data;
 }
 
-/** Decifra os campos sensíveis de uma ficha lida do banco. */
-function decryptPatient<T extends { birthDate: string | null; notes: string | null }>(
+/**
+ * Decifra os campos sensíveis de uma ficha lida do banco e normaliza
+ * `guardians` (Json) para um tipo concreto — assim o retorno não vaza o tipo
+ * `Prisma.JsonValue` (não-nomeável na fronteira do controller).
+ */
+function decryptPatient<
+  T extends { birthDate: string | null; notes: string | null; guardians?: unknown },
+>(
   patient: T,
-): Omit<T, 'birthDate' | 'notes'> & { birthDate: Date | null; notes: string | null } {
+): Omit<T, 'birthDate' | 'notes' | 'guardians'> & {
+  birthDate: Date | null;
+  notes: string | null;
+  guardians: GuardianInput[];
+} {
   return {
     ...patient,
     notes: decryptOptional(patient.notes),
     birthDate: patient.birthDate ? new Date(decryptField(patient.birthDate)) : null,
+    guardians: (patient.guardians as GuardianInput[] | null) ?? [],
   };
 }
 
 function inviteLoginUrl(): string {
   const origin = process.env.WEB_ORIGIN?.split(',')[0]?.trim() || 'http://localhost:3000';
   return `${origin}/paciente`;
+}
+
+// DTOs de resposta explícitos: evitam vazar o tipo Json do Prisma (não
+// nomeável na fronteira do controller) e documentam o contrato da ficha.
+export interface PatientResponse {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string;
+  birthDate: Date | null;
+  notes: string | null;
+  guardians: GuardianInput[];
+  createdAt: Date;
+  user: { id: string } | null;
+}
+
+export interface PatientDetailResponse extends PatientResponse {
+  appointments: {
+    id: string;
+    date: Date;
+    status: string;
+    professional: { id: string; name: string; color: string };
+    service: { id: string; name: string; duration: number };
+  }[];
 }
 
 @Injectable()
@@ -76,7 +118,7 @@ export class PatientsService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async list(tenantId: string, query: ListPatientsQuery) {
+  async list(tenantId: string, query: ListPatientsQuery): Promise<PatientResponse[]> {
     const patients = await this.prisma.withTenant(tenantId, (tx) =>
       tx.patient.findMany({
         where: {
@@ -97,7 +139,7 @@ export class PatientsService {
   }
 
   /** Ficha do paciente: dados + histórico de agendamentos. */
-  async get(tenantId: string, id: string) {
+  async get(tenantId: string, id: string): Promise<PatientDetailResponse> {
     const patient = await this.prisma.withTenant(tenantId, (tx) =>
       tx.patient.findFirst({
         where: { id, tenantId, deletedAt: null },
@@ -120,7 +162,7 @@ export class PatientsService {
     return decryptPatient(patient);
   }
 
-  create(tenantId: string, input: CreatePatientInput) {
+  create(tenantId: string, input: CreatePatientInput): Promise<PatientResponse> {
     return this.prisma.withTenant(tenantId, async (tx) => {
       const existing = await tx.patient.findUnique({
         where: { tenantId_phone: { tenantId, phone: input.phone } },
@@ -145,7 +187,7 @@ export class PatientsService {
     });
   }
 
-  update(tenantId: string, id: string, input: UpdatePatientInput) {
+  update(tenantId: string, id: string, input: UpdatePatientInput): Promise<PatientResponse> {
     return this.prisma.withTenant(tenantId, async (tx) => {
       await this.ensureExists(tx, tenantId, id);
       if (input.phone) {

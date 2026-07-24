@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { isMinor } from '@consultorio/contracts';
 import { api, ApiError } from '../../lib/api';
 import type { AppointmentItem, Professional } from '../../lib/painel-types';
 import {
@@ -18,6 +19,12 @@ import {
   toDatetimeLocal,
 } from '../../lib/agenda';
 import { formatPhoneBR, phoneDigits } from '../../lib/phone';
+import {
+  GuardiansField,
+  guardiansPayload,
+  emptyGuardian,
+  type GuardianForm,
+} from '../../components/guardians-field';
 import { BlocksView } from './blocks-view';
 import { WorkingHoursView } from './working-hours-view';
 
@@ -374,6 +381,8 @@ const emptyForm = {
   patientName: '',
   patientPhone: '',
   patientEmail: '',
+  patientBirthDate: '',
+  guardians: [emptyGuardian] as GuardianForm[],
   notes: '',
 };
 
@@ -392,6 +401,7 @@ function CreateAppointmentForm({
 
   const professional = professionals.find((p) => p.id === form.professionalId);
   const services = professional?.services ?? [];
+  const patientIsMinor = form.patientBirthDate ? isMinor(new Date(form.patientBirthDate)) : false;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -408,6 +418,8 @@ function CreateAppointmentForm({
             name: form.patientName,
             phone: form.patientPhone,
             ...(form.patientEmail && { email: form.patientEmail }),
+            birthDate: form.patientBirthDate,
+            ...(patientIsMinor && { guardians: guardiansPayload(form.guardians) }),
           },
           ...(form.notes && { notes: form.notes }),
         }),
@@ -505,16 +517,36 @@ function CreateAppointmentForm({
         Se o telefone já for de um paciente cadastrado, a consulta entra na ficha dele.
       </p>
 
-      <label className="block">
-        <span className="kicker">Email (opcional)</span>
-        <input
-          type="email"
-          value={form.patientEmail}
-          onChange={(e) => setForm({ ...form, patientEmail: e.target.value })}
-          maxLength={254}
-          className="input-editorial mt-2"
+      <div className="grid grid-cols-2 gap-6">
+        <label className="block">
+          <span className="kicker">Email (opcional)</span>
+          <input
+            type="email"
+            value={form.patientEmail}
+            onChange={(e) => setForm({ ...form, patientEmail: e.target.value })}
+            maxLength={254}
+            className="input-editorial mt-2"
+          />
+        </label>
+        <label className="block">
+          <span className="kicker">Nascimento</span>
+          <input
+            type="date"
+            value={form.patientBirthDate}
+            onChange={(e) => setForm({ ...form, patientBirthDate: e.target.value })}
+            required
+            max={new Date().toISOString().slice(0, 10)}
+            className="input-editorial mt-2"
+          />
+        </label>
+      </div>
+
+      {patientIsMinor && (
+        <GuardiansField
+          value={form.guardians}
+          onChange={(guardians) => setForm({ ...form, guardians })}
         />
-      </label>
+      )}
 
       <label className="block">
         <span className="kicker">Observações (opcional)</span>

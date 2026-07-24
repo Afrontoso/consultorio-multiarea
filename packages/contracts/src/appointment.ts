@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PhoneSchema } from './patient';
+import { guardiansField, minorGuardianRefine, PhoneSchema } from './patient';
 
 export const AppointmentStatusSchema = z.enum([
   'CONFIRMED',
@@ -10,12 +10,17 @@ export const AppointmentStatusSchema = z.enum([
 ]);
 export type AppointmentStatus = z.infer<typeof AppointmentStatusSchema>;
 
-// Paciente inline: criado (ou reaproveitado pelo telefone) junto com o agendamento.
-export const InlinePatientSchema = z.object({
-  name: z.string().min(2).max(120),
-  phone: PhoneSchema,
-  email: z.string().email().optional(),
-});
+// Paciente inline: criado (ou reaproveitado pelo telefone) junto com o
+// agendamento. birthDate obrigatório para exigir responsável de menores.
+export const InlinePatientSchema = z
+  .object({
+    name: z.string().min(2).max(120),
+    phone: PhoneSchema,
+    email: z.string().email().optional(),
+    birthDate: z.coerce.date(),
+    guardians: guardiansField,
+  })
+  .superRefine(minorGuardianRefine);
 export type InlinePatientInput = z.infer<typeof InlinePatientSchema>;
 
 export const CreateAppointmentSchema = z
