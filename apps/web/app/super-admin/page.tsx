@@ -8,6 +8,7 @@ import { AuthPanel } from '../../components/auth-panel';
 import type {
   AdminAuditEntry,
   AdminMetrics,
+  AdminPlan,
   AdminTenant,
   TenantStatus,
 } from '../../lib/admin-types';
@@ -21,6 +22,29 @@ const STATUS_LABEL: Record<TenantStatus, string> = {
 
 const brl = (n: number) =>
   n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+function planCode(plans: AdminPlan[], id?: string | null): string {
+  if (!id) return '—';
+  return plans.find((p) => p.id === id)?.code ?? id;
+}
+
+/** Descreve o que mudou numa entrada de auditoria (status e/ou plano, de→para). */
+function describeChange(detail: unknown, plans: AdminPlan[]): string {
+  const d = detail as {
+    from?: { status?: TenantStatus; planId?: string };
+    to?: { status?: TenantStatus; planId?: string };
+  } | null;
+  if (!d?.to) return '';
+  const parts: string[] = [];
+  if (d.to.status) {
+    const from = d.from?.status ? STATUS_LABEL[d.from.status] : '—';
+    parts.push(`status: ${from} → ${STATUS_LABEL[d.to.status]}`);
+  }
+  if (d.to.planId) {
+    parts.push(`plano: ${planCode(plans, d.from?.planId)} → ${planCode(plans, d.to.planId)}`);
+  }
+  return parts.join(' · ');
+}
 
 export default function SuperAdminPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -290,18 +314,23 @@ export default function SuperAdminPage() {
 
             <h2 className="font-serif text-2xl tracking-tight mt-14">Auditoria</h2>
             {audit && audit.length > 0 ? (
-              <ul className="mt-4 space-y-2 text-sm">
-                {audit.map((a) => (
-                  <li
-                    key={a.id}
-                    className="border-b border-[color:var(--color-rule)] pb-2 text-[color:var(--color-ink-soft)]"
-                  >
-                    <span className="text-[color:var(--color-ink)]">{a.actorEmail}</span> ·{' '}
-                    {a.action}
-                    {a.tenantId ? ` · ${a.tenantId}` : ''} ·{' '}
-                    {new Date(a.createdAt).toLocaleString('pt-BR')}
-                  </li>
-                ))}
+              <ul className="mt-4 space-y-3 text-sm">
+                {audit.map((a) => {
+                  const change = describeChange(a.detail, metrics.plans);
+                  const name =
+                    tenants.find((t) => t.id === a.tenantId)?.name ?? a.tenantId ?? '—';
+                  return (
+                    <li key={a.id} className="border-b border-[color:var(--color-rule)] pb-3">
+                      <p className="text-[color:var(--color-ink)]">
+                        <span className="font-medium">{name}</span>
+                        {change ? ` — ${change}` : ` — ${a.action}`}
+                      </p>
+                      <p className="text-xs text-[color:var(--color-ink-soft)] mt-0.5">
+                        {a.actorEmail} · {new Date(a.createdAt).toLocaleString('pt-BR')}
+                      </p>
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="mt-4 text-sm text-[color:var(--color-ink-soft)]">Nenhuma ação registrada.</p>
