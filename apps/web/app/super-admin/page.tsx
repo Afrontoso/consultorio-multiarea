@@ -37,6 +37,11 @@ export default function SuperAdminPage() {
   const [pendingPlan, setPendingPlan] = useState<{ tenantId: string; planId: string } | null>(
     null,
   );
+  // Suspender/reativar também exige confirmação (bloqueia o consultório).
+  const [pendingStatus, setPendingStatus] = useState<{
+    tenantId: string;
+    status: TenantStatus;
+  } | null>(null);
 
   useEffect(() => {
     return onAuthStateChanged(getFirebaseAuth(), (u) => {
@@ -232,10 +237,35 @@ export default function SuperAdminPage() {
                         })()}
                       </td>
                       <td className="py-3 pr-4">
-                        {t.status === 'SUSPENDED' || t.status === 'CANCELED' ? (
+                        {pendingStatus?.tenantId === t.id ? (
+                          <div className="flex items-center gap-3 text-xs">
+                            <span className="text-[color:var(--color-ink-soft)]">
+                              {pendingStatus.status === 'ACTIVE' ? 'Reativar' : 'Suspender'}{' '}
+                              {t.name}?
+                            </span>
+                            <button
+                              disabled={busyId === t.id}
+                              onClick={() => {
+                                const next = pendingStatus.status;
+                                setPendingStatus(null);
+                                void patchTenant(t.id, { status: next });
+                              }}
+                              className="link-editorial"
+                            >
+                              confirmar
+                            </button>
+                            <button
+                              disabled={busyId === t.id}
+                              onClick={() => setPendingStatus(null)}
+                              className="text-[color:var(--color-ink-soft)] underline underline-offset-4"
+                            >
+                              cancelar
+                            </button>
+                          </div>
+                        ) : t.status === 'SUSPENDED' || t.status === 'CANCELED' ? (
                           <button
                             disabled={busyId === t.id}
-                            onClick={() => void patchTenant(t.id, { status: 'ACTIVE' })}
+                            onClick={() => setPendingStatus({ tenantId: t.id, status: 'ACTIVE' })}
                             className="text-xs link-editorial"
                           >
                             reativar
@@ -243,7 +273,9 @@ export default function SuperAdminPage() {
                         ) : (
                           <button
                             disabled={busyId === t.id}
-                            onClick={() => void patchTenant(t.id, { status: 'SUSPENDED' })}
+                            onClick={() =>
+                              setPendingStatus({ tenantId: t.id, status: 'SUSPENDED' })
+                            }
                             className="text-xs text-[color:var(--color-clay-deep)] underline underline-offset-4"
                           >
                             suspender
