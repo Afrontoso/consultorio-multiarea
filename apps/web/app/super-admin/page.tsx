@@ -32,6 +32,11 @@ export default function SuperAdminPage() {
   const [tenants, setTenants] = useState<AdminTenant[] | null>(null);
   const [audit, setAudit] = useState<AdminAuditEntry[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Troca de plano pendente de confirmação (ação delicada — evita troca
+  // acidental por um clique no select).
+  const [pendingPlan, setPendingPlan] = useState<{ tenantId: string; planId: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     return onAuthStateChanged(getFirebaseAuth(), (u) => {
@@ -174,18 +179,57 @@ export default function SuperAdminPage() {
                       </td>
                       <td className="py-3 pr-4">{STATUS_LABEL[t.status]}</td>
                       <td className="py-3 pr-4">
-                        <select
-                          value={t.plan.id}
-                          disabled={busyId === t.id}
-                          onChange={(e) => void patchTenant(t.id, { planId: e.target.value })}
-                          className="input-editorial py-1"
-                        >
-                          {metrics.plans.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.code} · {brl(p.priceBRL)}
-                            </option>
-                          ))}
-                        </select>
+                        {(() => {
+                          const pending =
+                            pendingPlan?.tenantId === t.id ? pendingPlan.planId : null;
+                          const target = metrics.plans.find((p) => p.id === pending);
+                          return (
+                            <div className="space-y-2">
+                              <select
+                                value={pending ?? t.plan.id}
+                                disabled={busyId === t.id}
+                                onChange={(e) =>
+                                  setPendingPlan(
+                                    e.target.value === t.plan.id
+                                      ? null
+                                      : { tenantId: t.id, planId: e.target.value },
+                                  )
+                                }
+                                className="input-editorial py-1"
+                              >
+                                {metrics.plans.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.code} · {brl(p.priceBRL)}
+                                  </option>
+                                ))}
+                              </select>
+                              {target && (
+                                <div className="flex items-center gap-3 text-xs">
+                                  <span className="text-[color:var(--color-ink-soft)]">
+                                    Trocar {t.plan.code} → {target.code}?
+                                  </span>
+                                  <button
+                                    disabled={busyId === t.id}
+                                    onClick={() => {
+                                      setPendingPlan(null);
+                                      void patchTenant(t.id, { planId: target.id });
+                                    }}
+                                    className="link-editorial"
+                                  >
+                                    confirmar
+                                  </button>
+                                  <button
+                                    disabled={busyId === t.id}
+                                    onClick={() => setPendingPlan(null)}
+                                    className="text-[color:var(--color-ink-soft)] underline underline-offset-4"
+                                  >
+                                    cancelar
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="py-3 pr-4">
                         {t.status === 'SUSPENDED' || t.status === 'CANCELED' ? (
