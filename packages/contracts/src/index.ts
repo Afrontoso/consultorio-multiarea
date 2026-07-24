@@ -6,3 +6,4 @@ export * from './appointment';
 export * from './scheduling';
 export * from './legal';
 export * from './age';
+export * from './admin';

@@ -21,6 +21,7 @@
     "prisma:format": "prisma format",
     "seed": "tsx prisma/seed.ts",
     "purge:patients": "tsx scripts/purge-patients.ts",
+    "expire:trials": "tsx scripts/expire-trials.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
