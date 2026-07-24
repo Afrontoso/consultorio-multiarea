@@ -205,6 +205,19 @@ model Subscription {
   tenant Tenant @relation(fields: [tenantId], references: [id])
 }
 
+// Auditoria das ações do painel de plataforma (/super-admin). Global (sem RLS,
+// não é escopada por tenant): não adicionar ao array de rls.sql.
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  actorEmail String
+  action     String
+  tenantId   String?
+  detail     Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 enum HealthCategory {
   PSICOLOGIA
   FISIOTERAPIA

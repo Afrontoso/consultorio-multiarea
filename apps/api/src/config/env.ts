@@ -22,6 +22,9 @@ const EnvSchema = z
     // Chave AES-256 (32 bytes em base64) para cifrar campos sensíveis do
     // paciente. Opcional em dev; obrigatória em produção (ver superRefine).
     FIELD_ENCRYPTION_KEY: z.string().optional(),
+    // Emails com acesso ao painel de plataforma (/super-admin), separados por
+    // vírgula. Vazio = ninguém tem acesso (fail-safe).
+    SUPER_ADMIN_EMAILS: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     const firebase = [env.FIREBASE_PROJECT_ID, env.FIREBASE_CLIENT_EMAIL, env.FIREBASE_PRIVATE_KEY];

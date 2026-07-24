@@ -4,6 +4,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { TenantScopeInterceptor } from './common/interceptors/tenant-scope.interceptor';
 import { validateEnv } from './config/env';
+import { AdminModule } from './modules/admin/admin.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { AvailabilityModule } from './modules/availability/availability.module';
 import { BookingModule } from './modules/booking/booking.module';
@@ -32,6 +33,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
     AppointmentsModule,
     BookingModule,
     PatientsModule,
+    AdminModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_INTERCEPTOR, useClass: TenantScopeInterceptor }],
