@@ -34,12 +34,16 @@ export const CreateAppointmentSchema = z
 export type CreateAppointmentInput = z.infer<typeof CreateAppointmentSchema>;
 
 // Agendamento vindo da página pública: paciente sempre inline, sem recorrência.
+// `consent` é obrigatório: o titular precisa aceitar os termos para agendar (LGPD).
 export const PublicCreateAppointmentSchema = z.object({
   date: z.coerce.date(),
   professionalId: z.string().cuid(),
   serviceId: z.string().cuid(),
   patient: InlinePatientSchema,
   notes: z.string().max(500).optional(),
+  consent: z.literal(true, {
+    errorMap: () => ({ message: 'É necessário aceitar os termos e a política de privacidade.' }),
+  }),
 });
 export type PublicCreateAppointmentInput = z.infer<typeof PublicCreateAppointmentSchema>;
 

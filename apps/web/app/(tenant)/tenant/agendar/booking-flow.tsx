@@ -104,6 +104,7 @@ export function BookingFlow({ slug }: { slug: string }) {
   const [day, setDay] = useState<string | null>(null);
   const [slot, setSlot] = useState<string | null>(null);
   const [patient, setPatient] = useState({ name: '', phone: '', email: '' });
+  const [consent, setConsent] = useState(false);
 
   const [slots, setSlots] = useState<string[] | null>(null);
   const [slotsError, setSlotsError] = useState<string | null>(null);
@@ -195,6 +196,7 @@ export function BookingFlow({ slug }: { slug: string }) {
             phone: patient.phone,
             ...(patient.email && { email: patient.email }),
           },
+          consent: true,
         }),
       });
       setStep('sucesso');
@@ -494,11 +496,35 @@ export function BookingFlow({ slug }: { slug: string }) {
             patientName={patient.name}
           />
 
+          <label className="mt-8 flex items-start gap-3 text-sm text-[color:var(--color-ink-soft)] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              className="mt-1 shrink-0"
+            />
+            <span>
+              Li e concordo com os{' '}
+              <Link href="/termos" target="_blank" className="link-editorial">
+                Termos de Uso
+              </Link>{' '}
+              e a{' '}
+              <Link href="/privacidade" target="_blank" className="link-editorial">
+                Política de Privacidade
+              </Link>
+              .
+            </span>
+          </label>
+
           {submitError && (
             <p className="mt-6 text-sm text-[color:var(--color-clay-deep)]">{submitError}</p>
           )}
 
-          <button onClick={() => void confirm()} disabled={submitting} className="btn-clay mt-8">
+          <button
+            onClick={() => void confirm()}
+            disabled={submitting || !consent}
+            className="btn-clay mt-8"
+          >
             {submitting ? 'Confirmando…' : 'Confirmar agendamento'}
           </button>
         </div>

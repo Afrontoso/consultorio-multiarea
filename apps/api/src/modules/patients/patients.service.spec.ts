@@ -1,4 +1,6 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { TERMS_VERSION } from '@consultorio/contracts';
+import { decryptField, encryptField } from '../../common/crypto/field-crypto';
 
 const getUserByEmail = jest.fn();
 const createUser = jest.fn();
@@ -88,6 +90,29 @@ describe('PatientsService', () => {
       );
     });
 
+    it('cifra notes/birthDate e registra consentimento ao criar', async () => {
+      prisma.patient.findUnique.mockResolvedValue(null);
+      prisma.patient.create.mockResolvedValue({ id: 'pat-1' });
+
+      await service.create('t-1', {
+        name: 'Maria da Silva',
+        phone: '11999990000',
+        notes: 'Dado sensível',
+        birthDate: new Date('1990-05-10T00:00:00.000Z'),
+        consent: true,
+      });
+
+      const data = prisma.patient.create.mock.calls[0][0].data;
+      expect(data.notes).toMatch(/^v1:/);
+      expect(decryptField(data.notes)).toBe('Dado sensível');
+      expect(data.birthDate).toMatch(/^v1:/);
+      expect(new Date(decryptField(data.birthDate)).toISOString()).toBe(
+        '1990-05-10T00:00:00.000Z',
+      );
+      expect(data.consentAt).toBeInstanceOf(Date);
+      expect(data.consentVersion).toBe(TERMS_VERSION);
+    });
+
     it('409 se o telefone já pertence a paciente ativo', async () => {
       prisma.patient.findUnique.mockResolvedValue({ id: 'pat-1', deletedAt: null });
 
@@ -157,6 +182,21 @@ describe('PatientsService', () => {
       prisma.patient.findFirst.mockResolvedValue(null);
 
       await expect(service.get('t-1', 'pat-x')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('decifra notes/birthDate ao ler a ficha', async () => {
+      prisma.patient.findFirst.mockResolvedValue({
+        id: 'pat-1',
+        name: 'Maria',
+        notes: encryptField('Anotação sensível'),
+        birthDate: encryptField('1990-05-10T00:00:00.000Z'),
+        appointments: [],
+      });
+
+      const patient = await service.get('t-1', 'pat-1');
+
+      expect(patient.notes).toBe('Anotação sensível');
+      expect(patient.birthDate?.toISOString()).toBe('1990-05-10T00:00:00.000Z');
     });
   });
 

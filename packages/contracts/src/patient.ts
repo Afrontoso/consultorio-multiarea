@@ -17,6 +17,9 @@ export const CreatePatientSchema = z.object({
   phone: PhoneSchema,
   birthDate: z.coerce.date().optional(),
   notes: z.string().max(2000).optional(),
+  // Consentimento coletado do paciente (LGPD). No cadastro pelo painel, o
+  // staff atesta o aceite; o servidor grava consentAt + versão dos termos.
+  consent: z.boolean().optional(),
 });
 export type CreatePatientInput = z.infer<typeof CreatePatientSchema>;
 

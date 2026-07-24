@@ -25,7 +25,7 @@ describe('validateEnv', () => {
     );
   });
 
-  it('em produção exige Firebase e WEB_ORIGIN', () => {
+  it('em produção exige Firebase, WEB_ORIGIN e FIELD_ENCRYPTION_KEY', () => {
     expect(() => validateEnv({ DATABASE_URL: DB, NODE_ENV: 'production' })).toThrow(/produção/);
     const env = validateEnv({
       DATABASE_URL: DB,
@@ -34,6 +34,7 @@ describe('validateEnv', () => {
       FIREBASE_PROJECT_ID: 'p',
       FIREBASE_CLIENT_EMAIL: 'svc@p.iam.gserviceaccount.com',
       FIREBASE_PRIVATE_KEY: 'key',
+      FIELD_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
     });
     expect(env.NODE_ENV).toBe('production');
   });

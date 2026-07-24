@@ -159,6 +159,7 @@ describe('BookingService', () => {
       professionalId: 'prof-1',
       serviceId: 'svc-1',
       patient: { name: 'Paciente Teste', phone: '11999990000' },
+      consent: true as const,
     };
 
     it('delega ao motor de agendamentos com o tenantId resolvido pelo slug', async () => {

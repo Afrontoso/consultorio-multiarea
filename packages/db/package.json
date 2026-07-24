@@ -20,6 +20,7 @@
     "prisma:studio": "prisma studio",
     "prisma:format": "prisma format",
     "seed": "tsx prisma/seed.ts",
+    "purge:patients": "tsx scripts/purge-patients.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
