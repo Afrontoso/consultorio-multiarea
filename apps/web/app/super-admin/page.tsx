@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { getFirebaseAuth } from '../../lib/firebase';
 import { api, ApiError } from '../../lib/api';
+import { useAuthUser } from '../../lib/use-auth';
+import { AppHeader } from '../../components/app-header';
 import { AuthPanel } from '../../components/auth-panel';
+import { VerifyEmailNotice } from '../../components/verify-email-notice';
 import type {
   AdminAuditEntry,
   AdminMetrics,
@@ -47,8 +48,8 @@ function describeChange(detail: unknown, plans: AdminPlan[]): string {
 }
 
 export default function SuperAdminPage() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
+  const { user, loading: loadingAuth, emailVerified, recheckEmail, resendVerification } =
+    useAuthUser();
   const [denied, setDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,21 +68,9 @@ export default function SuperAdminPage() {
     status: TenantStatus;
   } | null>(null);
 
-  useEffect(() => {
-    return onAuthStateChanged(getFirebaseAuth(), (u) => {
-      setUser(u);
-      setLoadingAuth(false);
-      setDenied(false);
-      setError(null);
-      if (!u) {
-        setMetrics(null);
-        setTenants(null);
-        setAudit(null);
-      }
-    });
-  }, []);
-
   const load = useCallback(async () => {
+    setDenied(false);
+    setError(null);
     try {
       const [m, t, a] = await Promise.all([
         api<AdminMetrics>('/admin/metrics'),
@@ -101,8 +90,8 @@ export default function SuperAdminPage() {
     // load() é assíncrono: os setState acontecem após os awaits (fora do
     // ciclo síncrono do efeito), então o alerta do lint não se aplica aqui.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (user) void load();
-  }, [user, load]);
+    if (user && emailVerified) void load();
+  }, [user, emailVerified, load]);
 
   async function patchTenant(id: string, body: { status?: TenantStatus; planId?: string }) {
     setBusyId(id);
@@ -119,18 +108,7 @@ export default function SuperAdminPage() {
 
   return (
     <main className="min-h-screen">
-      <header className="border-b border-[color:var(--color-rule)]">
-        <div className="mx-auto max-w-[1100px] px-6 md:px-10 py-5 flex items-center justify-between gap-4">
-          <span className="font-serif italic text-2xl tracking-tight text-[color:var(--color-ink)]">
-            Consultório · plataforma
-          </span>
-          {user && (
-            <button onClick={() => signOut(getFirebaseAuth())} className="text-xs link-editorial">
-              sair
-            </button>
-          )}
-        </div>
-      </header>
+      <AppHeader brand="Consultório · plataforma" linkHome={false} showSignOut={user !== null} />
 
       <div className="mx-auto max-w-[1100px] px-6 md:px-10 py-12 md:py-16">
         {loadingAuth ? (
@@ -146,6 +124,13 @@ export default function SuperAdminPage() {
               }
             />
           </div>
+        ) : !emailVerified ? (
+          <VerifyEmailNotice
+            user={user}
+            section="Plataforma"
+            onRecheck={recheckEmail}
+            onResend={resendVerification}
+          />
         ) : denied ? (
           <div className="max-w-md py-12">
             <p className="section-number">§ Plataforma</p>

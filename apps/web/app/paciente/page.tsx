@@ -1,45 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { getFirebaseAuth } from '../../lib/firebase';
-import { api, ApiError } from '../../lib/api';
-import type { Me } from '../../lib/painel-types';
+import { useAuthUser, useMe } from '../../lib/use-auth';
+import { AppHeader } from '../../components/app-header';
 import { AuthPanel } from '../../components/auth-panel';
+import { VerifyEmailNotice } from '../../components/verify-email-notice';
 import { PatientAgendaSection } from './patient-agenda-section';
 
 export default function PacientePage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
-  const [me, setMe] = useState<Me | null>(null);
-  const [noAccount, setNoAccount] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(getFirebaseAuth(), (u) => {
-      setUser(u);
-      setLoadingAuth(false);
-      setError(null);
-      if (!u) {
-        setMe(null);
-        setNoAccount(false);
-      }
-    });
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    api<Me>('/me')
-      .then(setMe)
-      .catch((e) => {
-        if (e instanceof ApiError && e.status === 404) setNoAccount(true);
-        else setError((e as Error).message);
-      });
-  }, [user]);
+  const { user, loading: loadingAuth, emailVerified, recheckEmail, resendVerification } =
+    useAuthUser();
+  const { me, missing: noAccount, error } = useMe(emailVerified ? user : null);
 
   useEffect(() => {
     if (me && me.user.role !== 'PATIENT') {
@@ -49,24 +22,7 @@ export default function PacientePage() {
 
   return (
     <main className="min-h-screen">
-      <header className="border-b border-[color:var(--color-rule)]">
-        <div className="mx-auto max-w-[1100px] px-6 md:px-10 py-5 flex items-center justify-between gap-4">
-          <Link
-            href="/"
-            className="font-serif italic text-2xl tracking-tight text-[color:var(--color-ink)]"
-          >
-            Consultório
-          </Link>
-          {user && (
-            <button
-              onClick={() => signOut(getFirebaseAuth())}
-              className="text-xs link-editorial shrink-0"
-            >
-              sair
-            </button>
-          )}
-        </div>
-      </header>
+      <AppHeader showSignOut={user !== null} />
 
       <div className="mx-auto max-w-[1100px] px-6 md:px-10 py-12 md:py-16">
         {loadingAuth ? (
@@ -82,6 +38,13 @@ export default function PacientePage() {
               }
             />
           </div>
+        ) : !emailVerified ? (
+          <VerifyEmailNotice
+            user={user}
+            section="Minhas consultas"
+            onRecheck={recheckEmail}
+            onResend={resendVerification}
+          />
         ) : noAccount ? (
           <div className="max-w-md py-12">
             <p className="section-number">§ Minhas consultas</p>

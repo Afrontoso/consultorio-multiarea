@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PrismaClient } from '@consultorio/db';
+import { PrismaService } from '../src/modules/prisma/prisma.service';
 
 const PRISMA_DIR = join(__dirname, '..', '..', '..', 'packages', 'db', 'prisma');
 const API_ROLE = 'consultorio_api';
@@ -157,6 +158,53 @@ async function main(): Promise<void> {
       'inserir dados de outro tenant deve violar a policy',
     );
     console.log('✓ escrita cruzada de tenant é bloqueada pela policy');
+
+    // 4) O PrismaService de verdade, conectado com a role da aplicação: é o
+    //    caminho que guards, /me e painel de plataforma percorrem em produção.
+    //    PrismaService lê DATABASE_URL do ambiente, então apontamos para a role
+    //    restrita antes de instanciá-lo.
+    const originalUrl = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = apiRoleUrl(adminUrl);
+    const service = new PrismaService();
+    try {
+      // 4a) Consulta sem wrapper nenhum: não enxerga nada. É por isso que os
+      //     lookups globais precisam ser explícitos — sem withGlobalScope, o
+      //     login simplesmente não acharia o usuário sob esta role.
+      const semEscopo = await service.professional.findMany({
+        where: { email: { endsWith: `-${stamp}@rls.test` } },
+      });
+      assert.equal(semEscopo.length, 0, 'query fora dos wrappers não deve ver nada');
+      console.log('✓ query fora de withTenant/withGlobalScope não enxerga linha alguma');
+
+      // 4b) withTenant: só o próprio consultório.
+      const doTenantA = await service.withTenant(tenantAId, (tx) =>
+        tx.professional.findMany({ where: { email: { endsWith: `-${stamp}@rls.test` } } }),
+      );
+      assert.equal(doTenantA.length, 1, 'withTenant(A) deve ver 1 profissional');
+      assert.equal(doTenantA[0]!.tenantId, tenantAId);
+      console.log('✓ PrismaService.withTenant isola por consultório');
+
+      // 4c) withGlobalScope: leitura cruzando tenants (login, plataforma).
+      const todos = await service.withGlobalScope((tx) =>
+        tx.professional.findMany({ where: { email: { endsWith: `-${stamp}@rls.test` } } }),
+      );
+      assert.equal(todos.length, 2, 'withGlobalScope deve ver os dois tenants');
+      console.log('✓ PrismaService.withGlobalScope lê cruzando tenants');
+
+      // 4d) ...mas escrever no escopo global é recusado pelo WITH CHECK.
+      await assert.rejects(
+        service.withGlobalScope((tx) =>
+          tx.professional.create({
+            data: { tenantId: tenantAId, name: 'Global', email: `g-${stamp}@rls.test` },
+          }),
+        ),
+        'escopo global não pode escrever',
+      );
+      console.log('✓ escopo global é somente leitura');
+    } finally {
+      process.env.DATABASE_URL = originalUrl;
+      await service.$disconnect();
+    }
 
     console.log('\nRLS OK: isolamento multi-tenant verificado.');
   } finally {

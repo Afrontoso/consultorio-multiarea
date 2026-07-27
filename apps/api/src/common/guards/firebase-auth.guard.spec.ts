@@ -44,10 +44,30 @@ describe('FirebaseAuthGuard', () => {
   });
 
   it('attaches decoded uid/email to the request on success', async () => {
-    verifyIdToken.mockResolvedValueOnce({ uid: 'u-1', email: 'a@b.co' });
+    verifyIdToken.mockResolvedValueOnce({ uid: 'u-1', email: 'a@b.co', email_verified: true });
     const { ctx, req } = mockContext({ authorization: 'Bearer good-token' });
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
     expect(req.user).toEqual({ uid: 'u-1', email: 'a@b.co' });
     expect(verifyIdToken).toHaveBeenCalledWith('good-token');
+  });
+
+  it('rejeita token com email ainda não verificado', async () => {
+    verifyIdToken.mockResolvedValueOnce({ uid: 'u-1', email: 'a@b.co', email_verified: false });
+    const { ctx, req } = mockContext({ authorization: 'Bearer unverified' });
+    await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(req.user).toBeUndefined();
+  });
+
+  it('rejeita token sem a claim email_verified', async () => {
+    verifyIdToken.mockResolvedValueOnce({ uid: 'u-1', email: 'a@b.co' });
+    const { ctx } = mockContext({ authorization: 'Bearer no-claim' });
+    await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('aceita token sem email (não há caixa postal a provar)', async () => {
+    verifyIdToken.mockResolvedValueOnce({ uid: 'u-1' });
+    const { ctx, req } = mockContext({ authorization: 'Bearer no-email' });
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    expect(req.user).toEqual({ uid: 'u-1', email: undefined });
   });
 });

@@ -73,9 +73,13 @@ export class AdminService {
     }
 
     const { monthStart, monthEnd } = monthWindowUtc(new Date(), DEFAULT_UTC_OFFSET_MINUTES);
-    const appointmentsThisMonth = await this.prisma.appointment.count({
-      where: { date: { gte: monthStart, lt: monthEnd }, status: { notIn: ['CANCELED'] } },
-    });
+    // Agendamento é tabela com RLS: a contagem da plataforma cruza tenants de
+    // propósito, então vai no escopo global explícito.
+    const appointmentsThisMonth = await this.prisma.withGlobalScope((tx) =>
+      tx.appointment.count({
+        where: { date: { gte: monthStart, lt: monthEnd }, status: { notIn: ['CANCELED'] } },
+      }),
+    );
 
     return {
       totals: { tenants: tenants.length, mrr, appointmentsThisMonth },
@@ -106,25 +110,29 @@ export class AdminService {
       if (!plan) throw new NotFoundException('Plano não encontrado.');
     }
 
-    const updated = await this.prisma.tenant.update({
-      where: { id },
-      data: {
-        ...(input.status && { status: input.status }),
-        ...(input.planId && { planId: input.planId }),
-      },
-      select: TENANT_SELECT,
-    });
-
-    await this.prisma.adminAuditLog.create({
-      data: {
-        actorEmail,
-        action: 'UPDATE_TENANT',
-        tenantId: id,
-        detail: {
-          from: { status: tenant.status, planId: tenant.planId },
-          to: input,
-        } as Prisma.InputJsonValue,
-      },
+    // Mudança e registro de auditoria na mesma transação: nunca uma suspensão
+    // ou troca de plano sem rastro de quem fez.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.tenant.update({
+        where: { id },
+        data: {
+          ...(input.status && { status: input.status }),
+          ...(input.planId && { planId: input.planId }),
+        },
+        select: TENANT_SELECT,
+      });
+      await tx.adminAuditLog.create({
+        data: {
+          actorEmail,
+          action: 'UPDATE_TENANT',
+          tenantId: id,
+          detail: {
+            from: { status: tenant.status, planId: tenant.planId },
+            to: input,
+          } as Prisma.InputJsonValue,
+        },
+      });
+      return row;
     });
 
     return { ...updated, plan: { ...updated.plan, priceBRL: Number(updated.plan.priceBRL) } };

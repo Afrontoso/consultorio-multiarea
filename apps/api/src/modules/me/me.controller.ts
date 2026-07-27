@@ -10,10 +10,14 @@ export class MeController {
 
   @Get()
   async me(@CurrentUser() user: CurrentUserPayload) {
-    const dbUser = await this.prisma.user.findUnique({
-      where: { firebaseUid: user.uid },
-      include: { tenant: { include: { plan: true } } },
-    });
+    // Lookup por firebaseUid: global por natureza (é ele que revela a que
+    // consultório o usuário pertence).
+    const dbUser = await this.prisma.withGlobalScope((tx) =>
+      tx.user.findUnique({
+        where: { firebaseUid: user.uid },
+        include: { tenant: { include: { plan: true } } },
+      }),
+    );
     if (!dbUser) {
       throw new NotFoundException('Usuário não pertence a nenhum consultório.');
     }

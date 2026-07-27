@@ -172,7 +172,8 @@ describe('BookingService', () => {
 
       const result = await service.book('clinica-exemplo', input);
 
-      expect(appointments.create).toHaveBeenCalledWith('t-1', input);
+      // origin 'public': a ficha de um paciente existente não é sobrescrita.
+      expect(appointments.create).toHaveBeenCalledWith('t-1', input, 'public');
       expect(result).toEqual({ id: 'apt-1' });
     });
 

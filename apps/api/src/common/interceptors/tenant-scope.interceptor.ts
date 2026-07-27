@@ -22,10 +22,10 @@ export class TenantScopeInterceptor implements NestInterceptor {
 
     let tenantId = req.member?.tenantId;
     if (!tenantId && req.user) {
-      const user = await this.prisma.user.findUnique({
-        where: { firebaseUid: req.user.uid },
-        select: { tenantId: true },
-      });
+      const uid = req.user.uid;
+      const user = await this.prisma.withGlobalScope((tx) =>
+        tx.user.findUnique({ where: { firebaseUid: uid }, select: { tenantId: true } }),
+      );
       tenantId = user?.tenantId;
     }
     if (!tenantId) return next.handle();

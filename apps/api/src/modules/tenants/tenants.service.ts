@@ -9,7 +9,11 @@ const TRIAL_DAYS = 14;
 export class TenantsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createTenant(input: CreateTenantInput, firebaseUid: string): Promise<Tenant> {
+  async createTenant(
+    input: CreateTenantInput,
+    firebaseUid: string,
+    ownerEmail: string,
+  ): Promise<Tenant> {
     const freePlan = await this.prisma.plan.findUnique({ where: { code: 'FREE' } });
     if (!freePlan) {
       throw new NotFoundException('Plano FREE não encontrado (rode `pnpm --filter @consultorio/db seed`).');
@@ -20,7 +24,9 @@ export class TenantsService {
       throw new ConflictException(`Slug "${input.slug}" já está em uso.`);
     }
 
-    const alreadyOwner = await this.prisma.user.findUnique({ where: { firebaseUid } });
+    const alreadyOwner = await this.prisma.withGlobalScope((tx) =>
+      tx.user.findUnique({ where: { firebaseUid } }),
+    );
     if (alreadyOwner) {
       throw new ConflictException('Este usuário já pertence a um consultório.');
     }
@@ -45,7 +51,7 @@ export class TenantsService {
       await tx.user.create({
         data: {
           firebaseUid,
-          email: input.ownerEmail,
+          email: ownerEmail,
           tenantId: tenant.id,
           role: 'OWNER',
         },

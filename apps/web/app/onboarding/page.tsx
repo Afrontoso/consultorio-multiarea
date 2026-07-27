@@ -1,18 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { signOut } from 'firebase/auth';
 import { CreateTenantSchema, type HealthCategory } from '@consultorio/contracts';
 import { getFirebaseAuth } from '../../lib/firebase';
 import { api, ApiError } from '../../lib/api';
+import { useAuthUser, useMe } from '../../lib/use-auth';
 import type { Me } from '../../lib/painel-types';
 import { slugify } from '../../lib/slug';
 import { formatPhoneBR, phoneDigits } from '../../lib/phone';
 import { centavosToNumber, formatMoneyBR, moneyDigits } from '../../lib/money';
 import { WEEKDAY_LONG, hhmmToMinutes } from '../../lib/agenda';
 import { AuthPanel } from '../../components/auth-panel';
+import { VerifyEmailNotice } from '../../components/verify-email-notice';
 
 const CATEGORIES: { value: HealthCategory; label: string }[] = [
   { value: 'PSICOLOGIA', label: 'Psicologia' },
@@ -67,10 +69,13 @@ function StepProgress({ step }: { step: number }) {
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
+  const { user, loading: loadingAuth, emailVerified, recheckEmail, resendVerification } =
+    useAuthUser();
   // Consultório existente do usuário logado: 'checking' até o /me responder.
-  const [existing, setExisting] = useState<'checking' | 'none' | Me>('checking');
+  // 404 (sem consultório) e erro de rede caem os dois em 'none' — quem submete
+  // recebe o problema real do servidor.
+  const { me, missing, error: meError } = useMe(emailVerified ? user : null);
+  const existing: 'checking' | 'none' | Me = me ?? (missing || meError ? 'none' : 'checking');
 
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
@@ -106,32 +111,6 @@ export default function OnboardingPage() {
   const [hoursError, setHoursError] = useState<string | null>(null);
   const [hoursSaved, setHoursSaved] = useState(false);
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(getFirebaseAuth(), (u) => {
-      setUser(u);
-      setLoadingAuth(false);
-      setExisting('checking');
-    });
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    let stale = false;
-    api<Me>('/me')
-      .then((me) => {
-        if (!stale) setExisting(me);
-      })
-      .catch(() => {
-        // 404 = sem consultório; outros erros caem no formulário mesmo
-        // (o submit reporta o problema real).
-        if (!stale) setExisting('none');
-      });
-    return () => {
-      stale = true;
-    };
-  }, [user]);
-
   // Derivado no render: acompanha o nome até o usuário editar o campo.
   const slug = slugTouched ? manualSlug : slugify(name);
 
@@ -141,13 +120,8 @@ export default function OnboardingPage() {
       setError('Entre com Google primeiro.');
       return;
     }
-    const parsed = CreateTenantSchema.safeParse({
-      slug,
-      name,
-      category,
-      ownerEmail: user.email,
-      ownerName: user.displayName ?? user.email,
-    });
+    // O dono sai do token no servidor — nada de email no corpo.
+    const parsed = CreateTenantSchema.safeParse({ slug, name, category });
     if (!parsed.success) {
       setError(parsed.error.errors.map((x) => x.message).join('; '));
       return;
@@ -329,6 +303,13 @@ export default function OnboardingPage() {
                 }
               />
             </div>
+          ) : !emailVerified ? (
+            <VerifyEmailNotice
+              user={user}
+              section="1"
+              onRecheck={recheckEmail}
+              onResend={resendVerification}
+            />
           ) : existing === 'checking' ? (
             <p className="font-serif italic text-[color:var(--color-ink-soft)]">
               Conferindo seu caderno…

@@ -26,8 +26,6 @@ describe('CreateTenantSchema', () => {
     slug: 'ana-psi',
     name: 'Consultório da Ana',
     category: 'PSICOLOGIA',
-    ownerEmail: 'ana@example.com',
-    ownerName: 'Ana Lima',
   };
 
   it('accepts a well-formed payload', () => {
@@ -49,8 +47,9 @@ describe('CreateTenantSchema', () => {
     expect(() => CreateTenantSchema.parse({ ...valid, name: 'A' })).toThrow();
   });
 
-  it('rejects invalid email', () => {
-    expect(() => CreateTenantSchema.parse({ ...valid, ownerEmail: 'not-an-email' })).toThrow();
+  it('ignora dono informado no corpo (a API usa o email do token)', () => {
+    const parsed = CreateTenantSchema.parse({ ...valid, ownerEmail: 'atacante@example.com' });
+    expect(parsed).not.toHaveProperty('ownerEmail');
   });
 
   it('rejects unknown category', () => {

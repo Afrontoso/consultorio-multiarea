@@ -1,12 +1,12 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../modules/prisma/prisma.service';
-import type { MemberRequest } from './tenant-member.guard';
+import { resolveMember, type MemberRequest } from './tenant-member.guard';
 
 /**
- * Resolves the DB user for the authenticated firebaseUid and attaches it to the
- * request, same as TenantMemberGuard, but lets any role through (OWNER, STAFF,
- * PROFESSIONAL). Used by routes scoped to "my own data" (e.g. /me/appointments),
- * where the handler itself restricts access by professionalId.
+ * Mesma resolução de membro do TenantMemberGuard, mas sem filtro de papel
+ * (OWNER, STAFF, PROFESSIONAL, PATIENT). Usado nas rotas escopadas a "meus
+ * próprios dados" (ex.: /me/appointments), onde o próprio handler restringe o
+ * acesso pelo professionalId/patientId do membro.
  */
 @Injectable()
 export class TenantAnyMemberGuard implements CanActivate {
@@ -14,23 +14,7 @@ export class TenantAnyMemberGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<MemberRequest>();
-    if (!req.user) {
-      throw new ForbiddenException('TenantAnyMemberGuard requires FirebaseAuthGuard');
-    }
-    const user = await this.prisma.user.findUnique({
-      where: { firebaseUid: req.user.uid },
-    });
-    if (!user) {
-      throw new ForbiddenException('Usuário não pertence a nenhum consultório.');
-    }
-    req.member = {
-      userId: user.id,
-      tenantId: user.tenantId,
-      role: user.role,
-      email: user.email,
-      professionalId: user.professionalId,
-      patientId: user.patientId,
-    };
+    await resolveMember(this.prisma, req, 'TenantAnyMemberGuard');
     return true;
   }
 }

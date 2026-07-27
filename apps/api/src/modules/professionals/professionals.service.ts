@@ -4,7 +4,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { getAuth } from 'firebase-admin/auth';
 import type {
   CreateProfessionalInput,
   CreateScheduleBlockInput,
@@ -13,6 +12,7 @@ import type {
 } from '@consultorio/contracts';
 import { PrismaService, type TenantTx } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { grantTenantAccess, inviteLoginUrl } from '../../common/invites/invite';
 
 const SELECT = {
   id: true,
@@ -26,11 +26,6 @@ const SELECT = {
   services: { select: { id: true, name: true } },
   user: { select: { id: true } },
 } as const;
-
-function inviteLoginUrl(): string {
-  const origin = process.env.WEB_ORIGIN?.split(',')[0]?.trim() || 'http://localhost:3000';
-  return `${origin}/profissional`;
-}
 
 @Injectable()
 export class ProfessionalsService {
@@ -136,37 +131,18 @@ export class ProfessionalsService {
       return professional;
     });
 
-    const auth = getAuth();
-    let firebaseUid: string;
-    try {
-      firebaseUid = (await auth.getUserByEmail(professional.email)).uid;
-    } catch {
-      firebaseUid = (await auth.createUser({ email: professional.email })).uid;
-    }
-
-    const tenantName = await this.prisma.withTenant(tenantId, async (tx) => {
-      try {
-        await tx.user.create({
-          data: {
-            firebaseUid,
-            email: professional.email,
-            tenantId,
-            role: 'PROFESSIONAL',
-            professionalId,
-          },
-        });
-      } catch {
-        throw new ConflictException('Este email já está associado a outra conta no sistema.');
-      }
-      const tenant = await tx.tenant.findUniqueOrThrow({ where: { id: tenantId } });
-      return tenant.name;
+    const tenantName = await grantTenantAccess(this.prisma, {
+      tenantId,
+      email: professional.email,
+      role: 'PROFESSIONAL',
+      link: { professionalId },
     });
 
     this.notifications.professionalInvited({
       to: professional.email,
       professionalName: professional.name,
       tenantName,
-      loginUrl: inviteLoginUrl(),
+      loginUrl: inviteLoginUrl('/profissional'),
     });
 
     return { invited: true, email: professional.email };
