@@ -3,54 +3,34 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { getFirebaseAuth } from '../../lib/firebase';
-import { api, ApiError } from '../../lib/api';
-import type { Me, PlanUsage } from '../../lib/painel-types';
+import { api } from '../../lib/api';
+import { useAuthUser, useMe } from '../../lib/use-auth';
+import type { PlanUsage } from '../../lib/painel-types';
 import { AgendaSection } from './agenda-section';
 import { PatientsSection } from './patients-section';
 import { ProfessionalsSection } from './professionals-section';
 import { ServicesSection } from './services-section';
+import { AppHeader } from '../../components/app-header';
 import { AuthPanel } from '../../components/auth-panel';
+import { VerifyEmailNotice } from '../../components/verify-email-notice';
 
 type Tab = 'agenda' | 'patients' | 'professionals' | 'services';
 
 export default function PainelPage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
-  const [me, setMe] = useState<Me | null>(null);
-  const [noTenant, setNoTenant] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { user, loading: loadingAuth, emailVerified, recheckEmail, resendVerification } =
+    useAuthUser();
+  const { me, missing: noTenant, error } = useMe(emailVerified ? user : null);
   const [tab, setTab] = useState<Tab>('agenda');
   const [usage, setUsage] = useState<PlanUsage | null>(null);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(getFirebaseAuth(), (u) => {
-      setUser(u);
-      setLoadingAuth(false);
-      setError(null);
-      if (!u) {
-        setMe(null);
-        setNoTenant(false);
-      }
-    });
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    api<Me>('/me')
-      .then(setMe)
-      .catch((e) => {
-        if (e instanceof ApiError && e.status === 404) setNoTenant(true);
-        else setError((e as Error).message);
-      });
+    if (!user || !emailVerified) return;
     // Aviso de limite do plano — falha silenciosa não bloqueia o painel.
     api<PlanUsage>('/appointments/usage')
       .then(setUsage)
       .catch(() => setUsage(null));
-  }, [user]);
+  }, [user, emailVerified]);
 
   useEffect(() => {
     if (me?.user.role === 'PROFESSIONAL') {
@@ -64,29 +44,13 @@ export default function PainelPage() {
 
   return (
     <main className="min-h-screen">
-      <header className="border-b border-[color:var(--color-rule)]">
-        <div className="mx-auto max-w-[1100px] px-6 md:px-10 py-5 flex items-center justify-between gap-4">
-          <Link
-            href="/"
-            className="font-serif italic text-2xl tracking-tight text-[color:var(--color-ink)]"
-          >
-            Consultório
-          </Link>
-          {me && (
-            <div className="flex items-center gap-5 min-w-0">
-              <a href={`/c/${me.tenant.slug}`} className="text-xs link-editorial truncate">
-                ver página pública →
-              </a>
-              <button
-                onClick={() => signOut(getFirebaseAuth())}
-                className="text-xs link-editorial shrink-0"
-              >
-                sair
-              </button>
-            </div>
-          )}
-        </div>
-      </header>
+      <AppHeader showSignOut={user !== null}>
+        {me && (
+          <a href={`/c/${me.tenant.slug}`} className="text-xs link-editorial truncate">
+            ver página pública →
+          </a>
+        )}
+      </AppHeader>
 
       <div className="mx-auto max-w-[1100px] px-6 md:px-10 py-12 md:py-16">
         {loadingAuth ? (
@@ -104,6 +68,13 @@ export default function PainelPage() {
               }
             />
           </div>
+        ) : !emailVerified ? (
+          <VerifyEmailNotice
+            user={user}
+            section="Painel"
+            onRecheck={recheckEmail}
+            onResend={resendVerification}
+          />
         ) : noTenant ? (
           <div className="max-w-md py-12">
             <p className="section-number">§ Painel</p>

@@ -78,7 +78,8 @@ export class BookingService {
   /** Agendamento público: paciente inline, reaproveitado pelo telefone. */
   async book(slug: string, input: PublicCreateAppointmentInput) {
     const tenant = await this.activeTenant(slug);
-    return this.appointments.create(tenant.id, input);
+    // origin 'public': ficha de paciente já existente não é sobrescrita.
+    return this.appointments.create(tenant.id, input, 'public');
   }
 
   private async activeTenant(slug: string) {

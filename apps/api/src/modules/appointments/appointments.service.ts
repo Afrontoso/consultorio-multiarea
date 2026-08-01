@@ -37,6 +37,13 @@ const MAX_SERVICE_MINUTES = 480;
 // tenant.settings.cancellationMinNoticeMinutes.
 const DEFAULT_MIN_NOTICE_MINUTES = 1440;
 
+/**
+ * De onde veio o agendamento. `panel` é staff autenticado do consultório;
+ * `public` é a página de agendamento aberta na internet — e por isso não pode
+ * alterar a ficha de um paciente que já existe.
+ */
+export type AppointmentOrigin = 'panel' | 'public';
+
 /** Janela UTC do mês-calendário que contém `date` no fuso do consultório. */
 export function monthWindowUtc(
   date: Date,
@@ -105,7 +112,11 @@ export class AppointmentsService {
     });
   }
 
-  async create(tenantId: string, input: CreateAppointmentInput & { consent?: boolean }) {
+  async create(
+    tenantId: string,
+    input: CreateAppointmentInput & { consent?: boolean },
+    origin: AppointmentOrigin = 'panel',
+  ) {
     // Transação única: checagem de limite/conflito e criação são atômicas.
     const { appointment, emailCtx } = await this.prisma.withTenant(tenantId, async (tx) => {
       const tenant = await tx.tenant.findUniqueOrThrow({
@@ -130,7 +141,7 @@ export class AppointmentsService {
         service.duration,
       );
 
-      const patientId = await this.resolvePatient(tx, tenantId, input);
+      const patientId = await this.resolvePatient(tx, tenantId, input, origin);
       const patient = await tx.patient.findUniqueOrThrow({ where: { id: patientId } });
 
       const created = await tx.appointment.create({
@@ -317,11 +328,12 @@ export class AppointmentsService {
     }
   }
 
-  /** patientId existente ou upsert do paciente inline pelo telefone. */
+  /** patientId existente ou paciente inline resolvido pelo telefone. */
   private async resolvePatient(
     tx: TenantTx,
     tenantId: string,
     input: CreateAppointmentInput & { consent?: boolean },
+    origin: AppointmentOrigin,
   ) {
     if (input.patientId) {
       const patient = await tx.patient.findFirst({
@@ -344,26 +356,49 @@ export class AppointmentsService {
     // a lista de responsáveis vai em texto claro (Json).
     const encryptedBirthDate = encryptField(new Date(birthDate).toISOString());
     const guardiansData = (guardians ?? []) as Prisma.InputJsonValue;
-    const patient = await tx.patient.upsert({
+
+    const existing = await tx.patient.findUnique({
       where: { tenantId_phone: { tenantId, phone } },
-      update: {
-        name,
-        email,
-        birthDate: encryptedBirthDate,
-        guardians: guardiansData,
-        deletedAt: null,
-        ...consentData,
-      },
-      create: {
-        name,
-        phone,
-        email,
-        birthDate: encryptedBirthDate,
-        guardians: guardiansData,
-        tenantId,
-        ...consentData,
-      },
     });
+    if (!existing) {
+      const created = await tx.patient.create({
+        data: {
+          name,
+          phone,
+          email,
+          birthDate: encryptedBirthDate,
+          guardians: guardiansData,
+          tenantId,
+          ...consentData,
+        },
+      });
+      return created.id;
+    }
+
+    // A ficha já existe. Pelo painel (staff autenticado) atualizar é o
+    // esperado. Pela página pública, não: o telefone é o único "segredo" ali,
+    // e quem o souber poderia reescrever nome, email e data de nascimento de
+    // um paciente alheio — inclusive desviar as notificações da consulta dele
+    // trocando o email. Então o fluxo público só preenche o que está vazio.
+    const data =
+      origin === 'public'
+        ? {
+            ...(existing.name ? {} : { name }),
+            ...(existing.email ? {} : { email }),
+            ...(existing.birthDate ? {} : { birthDate: encryptedBirthDate }),
+            ...(existing.guardians ? {} : { guardians: guardiansData }),
+            deletedAt: null,
+            ...consentData,
+          }
+        : {
+            name,
+            email,
+            birthDate: encryptedBirthDate,
+            guardians: guardiansData,
+            deletedAt: null,
+            ...consentData,
+          };
+    const patient = await tx.patient.update({ where: { id: existing.id }, data });
     return patient.id;
   }
 }

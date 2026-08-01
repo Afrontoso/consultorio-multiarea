@@ -68,6 +68,22 @@ describe('NotificationsService', () => {
     expect(sent[0]!.subject).toContain('cancelada');
   });
 
+  it('escapa nome do paciente no HTML (vem da página pública, sem auth)', async () => {
+    service.appointmentConfirmed({
+      ...ctx,
+      patientName: '<img src=x onerror="alert(1)">',
+      tenantName: 'Clínica <b>Teste</b>',
+    });
+    await flush();
+
+    const toProfessional = sent.find((m) => m.to === 'ana@example.com')!;
+    expect(toProfessional.html).not.toContain('<img');
+    expect(toProfessional.html).toContain('&lt;img src=x onerror=&quot;alert(1)&quot;&gt;');
+    expect(toProfessional.html).toContain('Clínica &lt;b&gt;Teste&lt;/b&gt;');
+    // A marcação do próprio template continua sendo HTML de verdade.
+    expect(toProfessional.html).toContain('<strong>');
+  });
+
   it('falha do provider não propaga (fire-and-forget)', async () => {
     const failing = new NotificationsService({
       send: async () => {

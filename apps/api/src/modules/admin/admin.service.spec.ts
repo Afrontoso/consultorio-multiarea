@@ -6,14 +6,23 @@ type PrismaMock = {
   plan: { findMany: jest.Mock; findUnique: jest.Mock };
   appointment: { count: jest.Mock };
   adminAuditLog: { create: jest.Mock; findMany: jest.Mock };
+  withGlobalScope: jest.Mock;
+  $transaction: jest.Mock;
 };
 
 function buildPrisma(): PrismaMock {
-  return {
+  const models = {
     tenant: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
     plan: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
     appointment: { count: jest.fn().mockResolvedValue(0) },
     adminAuditLog: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+  };
+  // withGlobalScope/$transaction entregam o próprio mock como tx (mesmos
+  // jest.Mock por modelo), como no spec de patients.
+  return {
+    ...models,
+    withGlobalScope: jest.fn(async (fn: (tx: typeof models) => unknown) => fn(models)),
+    $transaction: jest.fn(async (fn: (tx: typeof models) => unknown) => fn(models)),
   };
 }
 
@@ -77,6 +86,15 @@ describe('AdminService', () => {
           }),
         }),
       );
+    });
+
+    it('grava mudança e auditoria na mesma transação', async () => {
+      prisma.tenant.findUnique.mockResolvedValue(existing);
+      prisma.tenant.update.mockResolvedValue(updated);
+
+      await service.updateTenant('t1', { status: 'SUSPENDED' }, 'admin@x.co');
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
 
     it('404 quando o tenant não existe', async () => {

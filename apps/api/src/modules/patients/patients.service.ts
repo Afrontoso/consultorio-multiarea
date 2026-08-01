@@ -4,7 +4,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { getAuth } from 'firebase-admin/auth';
 import {
   TERMS_VERSION,
   type CreatePatientInput,
@@ -21,6 +20,7 @@ import {
   encryptField,
   encryptOptional,
 } from '../../common/crypto/field-crypto';
+import { grantTenantAccess, inviteLoginUrl } from '../../common/invites/invite';
 
 const SELECT = {
   id: true,
@@ -80,11 +80,6 @@ function decryptPatient<
     birthDate: patient.birthDate ? new Date(decryptField(patient.birthDate)) : null,
     guardians: (patient.guardians as GuardianInput[] | null) ?? [],
   };
-}
-
-function inviteLoginUrl(): string {
-  const origin = process.env.WEB_ORIGIN?.split(',')[0]?.trim() || 'http://localhost:3000';
-  return `${origin}/paciente`;
 }
 
 // DTOs de resposta explícitos: evitam vazar o tipo Json do Prisma (não
@@ -233,14 +228,16 @@ export class PatientsService {
   }
 
   async invite(tenantId: string, patientId: string) {
-    // Checagens dentro da transação; a chamada ao Firebase fica fora (I/O de
-    // rede não deve segurar a transação Postgres aberta).
+    // Checagens dentro da transação; o convite em si (Firebase + criação do
+    // User) sai fora dela, em grantTenantAccess. Devolve nome e email já
+    // estreitados para string — o `email` da ficha é opcional.
     const patient = await this.prisma.withTenant(tenantId, async (tx) => {
       const patient = await tx.patient.findFirst({
         where: { id: patientId, tenantId, deletedAt: null },
       });
       if (!patient) throw new NotFoundException('Paciente não encontrado.');
-      if (!patient.email) {
+      const email = patient.email;
+      if (!email) {
         throw new BadRequestException('Cadastre um email para este paciente antes de convidar.');
       }
 
@@ -249,48 +246,29 @@ export class PatientsService {
         throw new ConflictException('Este paciente já tem acesso à área do paciente.');
       }
       const emailTaken = await tx.user.findUnique({
-        where: { tenantId_email: { tenantId, email: patient.email } },
+        where: { tenantId_email: { tenantId, email } },
       });
       if (emailTaken) {
         throw new ConflictException('Já existe um usuário com este email neste consultório.');
       }
-      return patient;
+      return { name: patient.name, email };
     });
 
-    const auth = getAuth();
-    let firebaseUid: string;
-    try {
-      firebaseUid = (await auth.getUserByEmail(patient.email!)).uid;
-    } catch {
-      firebaseUid = (await auth.createUser({ email: patient.email! })).uid;
-    }
-
-    const tenantName = await this.prisma.withTenant(tenantId, async (tx) => {
-      try {
-        await tx.user.create({
-          data: {
-            firebaseUid,
-            email: patient.email!,
-            tenantId,
-            role: 'PATIENT',
-            patientId,
-          },
-        });
-      } catch {
-        throw new ConflictException('Este email já está associado a outra conta no sistema.');
-      }
-      const tenant = await tx.tenant.findUniqueOrThrow({ where: { id: tenantId } });
-      return tenant.name;
+    const tenantName = await grantTenantAccess(this.prisma, {
+      tenantId,
+      email: patient.email,
+      role: 'PATIENT',
+      link: { patientId },
     });
 
     this.notifications.patientInvited({
-      to: patient.email!,
+      to: patient.email,
       patientName: patient.name,
       tenantName,
-      loginUrl: inviteLoginUrl(),
+      loginUrl: inviteLoginUrl('/paciente'),
     });
 
-    return { invited: true, email: patient.email! };
+    return { invited: true, email: patient.email };
   }
 
   private async ensureExists(tx: TenantTx, tenantId: string, id: string) {

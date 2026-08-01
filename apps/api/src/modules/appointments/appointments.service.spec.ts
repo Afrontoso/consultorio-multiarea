@@ -1,12 +1,18 @@
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { AppointmentsService, monthWindowUtc } from './appointments.service';
-import { decryptField } from '../../common/crypto/field-crypto';
+import { decryptField, encryptField } from '../../common/crypto/field-crypto';
 
 type PrismaMock = {
   tenant: { findUniqueOrThrow: jest.Mock };
   professional: { findFirst: jest.Mock };
   service: { findFirst: jest.Mock };
-  patient: { findFirst: jest.Mock; findUniqueOrThrow: jest.Mock; upsert: jest.Mock };
+  patient: {
+    findFirst: jest.Mock;
+    findUnique: jest.Mock;
+    findUniqueOrThrow: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
+  };
   appointment: {
     findMany: jest.Mock;
     findFirst: jest.Mock;
@@ -23,7 +29,13 @@ function buildPrismaMock(): PrismaMock {
     tenant: { findUniqueOrThrow: jest.fn() },
     professional: { findFirst: jest.fn() },
     service: { findFirst: jest.fn() },
-    patient: { findFirst: jest.fn(), findUniqueOrThrow: jest.fn(), upsert: jest.fn() },
+    patient: {
+      findFirst: jest.fn(),
+      findUnique: jest.fn().mockResolvedValue(null),
+      findUniqueOrThrow: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
     appointment: {
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn(),
@@ -66,7 +78,9 @@ function happyPathMocks(prisma: PrismaMock) {
     email: 'ana@example.com',
   });
   prisma.service.findFirst.mockResolvedValue({ id: 'svc-1', name: 'Sessão', duration: 60 });
-  prisma.patient.upsert.mockResolvedValue({ id: 'pat-1' });
+  prisma.patient.findUnique.mockResolvedValue(null); // telefone ainda não cadastrado
+  prisma.patient.create.mockResolvedValue({ id: 'pat-1' });
+  prisma.patient.update.mockResolvedValue({ id: 'pat-1' });
   prisma.patient.findUniqueOrThrow.mockResolvedValue({
     id: 'pat-1',
     name: 'Paciente Teste',
@@ -97,16 +111,17 @@ describe('AppointmentsService', () => {
   });
 
   describe('create', () => {
-    it('cria agendamento com paciente inline (upsert por telefone)', async () => {
+    it('cria agendamento com paciente inline (dedup por telefone)', async () => {
       happyPathMocks(prisma);
 
       await service.create('t-1', baseInput);
 
-      expect(prisma.patient.upsert).toHaveBeenCalledWith(
+      expect(prisma.patient.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { tenantId_phone: { tenantId: 't-1', phone: '11999990000' } },
         }),
       );
+      expect(prisma.patient.create).toHaveBeenCalled();
       expect(prisma.appointment.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -132,12 +147,98 @@ describe('AppointmentsService', () => {
         },
       });
 
-      const arg = prisma.patient.upsert.mock.calls[0][0];
-      expect(arg.create.birthDate).toMatch(/^v1:/);
-      expect(new Date(decryptField(arg.create.birthDate)).toISOString()).toBe(
+      const arg = prisma.patient.create.mock.calls[0][0];
+      expect(arg.data.birthDate).toMatch(/^v1:/);
+      expect(new Date(decryptField(arg.data.birthDate)).toISOString()).toBe(
         '2015-03-01T00:00:00.000Z',
       );
-      expect(arg.create.guardians).toEqual(guardians);
+      expect(arg.data.guardians).toEqual(guardians);
+    });
+
+    describe('paciente inline que já existe', () => {
+      const existing = {
+        id: 'pat-existente',
+        name: 'Maria Original',
+        email: 'maria@example.com',
+        birthDate: encryptField('1990-01-01T00:00:00.000Z'),
+        guardians: [],
+        deletedAt: null,
+      };
+
+      it('agendamento público não sobrescreve a ficha de quem já é paciente', async () => {
+        happyPathMocks(prisma);
+        prisma.patient.findUnique.mockResolvedValue(existing);
+        prisma.patient.update.mockResolvedValue({ id: 'pat-existente' });
+
+        await service.create(
+          't-1',
+          {
+            ...baseInput,
+            patient: {
+              name: 'Nome do Atacante',
+              phone: '11999990000',
+              email: 'atacante@example.com',
+              birthDate: new Date('2000-01-01T00:00:00.000Z'),
+            },
+          },
+          'public',
+        );
+
+        const data = prisma.patient.update.mock.calls[0][0].data;
+        expect(data).not.toHaveProperty('name');
+        expect(data).not.toHaveProperty('email');
+        expect(data).not.toHaveProperty('birthDate');
+        // A consulta ainda é criada, amarrada à ficha existente.
+        expect(prisma.appointment.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ patientId: 'pat-existente' }),
+          }),
+        );
+      });
+
+      it('agendamento público preenche só os campos ainda vazios', async () => {
+        happyPathMocks(prisma);
+        prisma.patient.findUnique.mockResolvedValue({ ...existing, email: null });
+        prisma.patient.update.mockResolvedValue({ id: 'pat-existente' });
+
+        await service.create(
+          't-1',
+          {
+            ...baseInput,
+            patient: {
+              name: 'Maria Original',
+              phone: '11999990000',
+              email: 'maria.nova@example.com',
+              birthDate: new Date('1990-01-01T00:00:00.000Z'),
+            },
+          },
+          'public',
+        );
+
+        expect(prisma.patient.update.mock.calls[0][0].data.email).toBe(
+          'maria.nova@example.com',
+        );
+      });
+
+      it('pelo painel a ficha continua sendo atualizada', async () => {
+        happyPathMocks(prisma);
+        prisma.patient.findUnique.mockResolvedValue(existing);
+        prisma.patient.update.mockResolvedValue({ id: 'pat-existente' });
+
+        await service.create('t-1', {
+          ...baseInput,
+          patient: {
+            name: 'Maria Corrigida',
+            phone: '11999990000',
+            email: 'maria.corrigida@example.com',
+            birthDate: new Date('1990-01-01T00:00:00.000Z'),
+          },
+        });
+
+        const data = prisma.patient.update.mock.calls[0][0].data;
+        expect(data.name).toBe('Maria Corrigida');
+        expect(data.email).toBe('maria.corrigida@example.com');
+      });
     });
 
     it('dispara email de confirmação após criar', async () => {
@@ -206,7 +307,7 @@ describe('AppointmentsService', () => {
       );
     });
 
-    it('usa patientId existente sem upsert, validando o tenant', async () => {
+    it('usa patientId existente sem tocar na ficha, validando o tenant', async () => {
       happyPathMocks(prisma);
       prisma.patient.findFirst.mockResolvedValue({ id: 'pat-9' });
 
@@ -217,7 +318,8 @@ describe('AppointmentsService', () => {
         patientId: 'pat-9',
       });
 
-      expect(prisma.patient.upsert).not.toHaveBeenCalled();
+      expect(prisma.patient.create).not.toHaveBeenCalled();
+      expect(prisma.patient.update).not.toHaveBeenCalled();
       expect(prisma.appointment.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ patientId: 'pat-9' }) }),
       );

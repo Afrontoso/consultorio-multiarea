@@ -24,6 +24,33 @@ export function formatDateTimePtBr(date: Date, utcOffsetMinutes: number): string
   return `${weekday}, ${day} às ${hh}:${mm}`;
 }
 
+/**
+ * Escapa texto vindo do usuário antes de entrar no HTML do email. Nome de
+ * paciente e de consultório são digitados livremente (inclusive na página
+ * pública de agendamento, sem autenticação) e caem em emails lidos por
+ * terceiros — sem isto, um nome como `<a href="...">` vira marcação de verdade
+ * na caixa de entrada do profissional.
+ */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Template tag que escapa toda interpolação — o texto fixo do template é o
+ * único HTML de verdade. Monte todo corpo de email com ela.
+ */
+function html(strings: TemplateStringsArray, ...values: unknown[]): string {
+  return strings.reduce(
+    (acc, chunk, i) => acc + chunk + (i < values.length ? escapeHtml(String(values[i])) : ''),
+    '',
+  );
+}
+
 function layout(title: string, lines: string[]): string {
   return [
     `<div style="font-family:Georgia,serif;max-width:520px;margin:0 auto;color:#1c1917">`,
@@ -51,10 +78,10 @@ export class NotificationsService {
       this.fire({
         to: ctx.patientEmail,
         subject: `Consulta confirmada — ${ctx.tenantName}`,
-        html: layout(`Sua consulta está confirmada, ${ctx.patientName}.`, [
-          `<strong>${ctx.serviceName}</strong> (${ctx.durationMinutes} min) com <strong>${ctx.professionalName}</strong>.`,
-          `<strong>${when}</strong>.`,
-          `Em caso de imprevisto, entre em contato com ${ctx.tenantName} para reagendar.`,
+        html: layout(html`Sua consulta está confirmada, ${ctx.patientName}.`, [
+          html`<strong>${ctx.serviceName}</strong> (${ctx.durationMinutes} min) com <strong>${ctx.professionalName}</strong>.`,
+          html`<strong>${when}</strong>.`,
+          html`Em caso de imprevisto, entre em contato com ${ctx.tenantName} para reagendar.`,
         ]),
       });
     }
@@ -63,9 +90,9 @@ export class NotificationsService {
       this.fire({
         to: ctx.professionalEmail,
         subject: `Novo agendamento — ${ctx.patientName}`,
-        html: layout(`Novo agendamento em ${ctx.tenantName}.`, [
-          `<strong>${ctx.patientName}</strong> agendou <strong>${ctx.serviceName}</strong> (${ctx.durationMinutes} min).`,
-          `<strong>${when}</strong>.`,
+        html: layout(html`Novo agendamento em ${ctx.tenantName}.`, [
+          html`<strong>${ctx.patientName}</strong> agendou <strong>${ctx.serviceName}</strong> (${ctx.durationMinutes} min).`,
+          html`<strong>${when}</strong>.`,
         ]),
       });
     }
@@ -81,9 +108,9 @@ export class NotificationsService {
     this.fire({
       to: ctx.to,
       subject: `Você foi convidado para o painel de ${ctx.tenantName}`,
-      html: layout(`Olá, ${ctx.professionalName}.`, [
-        `Você agora tem acesso ao painel de ${ctx.tenantName} para ver sua agenda.`,
-        `Entre em <a href="${ctx.loginUrl}">${ctx.loginUrl}</a> com o email <strong>${ctx.to}</strong> — use "Link mágico" para entrar sem senha, ou Google se for o mesmo email.`,
+      html: layout(html`Olá, ${ctx.professionalName}.`, [
+        html`Você agora tem acesso ao painel de ${ctx.tenantName} para ver sua agenda.`,
+        html`Entre em <a href="${ctx.loginUrl}">${ctx.loginUrl}</a> com o email <strong>${ctx.to}</strong> — use "Link mágico" para entrar sem senha, ou Google se for o mesmo email.`,
       ]),
     });
   }
@@ -98,9 +125,9 @@ export class NotificationsService {
     this.fire({
       to: ctx.to,
       subject: `Você foi convidado para acompanhar suas consultas em ${ctx.tenantName}`,
-      html: layout(`Olá, ${ctx.patientName}.`, [
-        `Você agora pode ver, reagendar e cancelar suas consultas em ${ctx.tenantName}.`,
-        `Entre em <a href="${ctx.loginUrl}">${ctx.loginUrl}</a> com o email <strong>${ctx.to}</strong> — use "Link mágico" para entrar sem senha, ou Google se for o mesmo email.`,
+      html: layout(html`Olá, ${ctx.patientName}.`, [
+        html`Você agora pode ver, reagendar e cancelar suas consultas em ${ctx.tenantName}.`,
+        html`Entre em <a href="${ctx.loginUrl}">${ctx.loginUrl}</a> com o email <strong>${ctx.to}</strong> — use "Link mágico" para entrar sem senha, ou Google se for o mesmo email.`,
       ]),
     });
   }
@@ -112,9 +139,9 @@ export class NotificationsService {
     this.fire({
       to: ctx.patientEmail,
       subject: `Consulta cancelada — ${ctx.tenantName}`,
-      html: layout(`Sua consulta foi cancelada, ${ctx.patientName}.`, [
-        `${ctx.serviceName} com ${ctx.professionalName}, que seria ${when}.`,
-        `Se preferir outro horário, agende novamente com ${ctx.tenantName}.`,
+      html: layout(html`Sua consulta foi cancelada, ${ctx.patientName}.`, [
+        html`${ctx.serviceName} com ${ctx.professionalName}, que seria ${when}.`,
+        html`Se preferir outro horário, agende novamente com ${ctx.tenantName}.`,
       ]),
     });
   }

@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import {
   createUserWithEmailAndPassword,
   isSignInWithEmailLink,
+  sendEmailVerification,
   sendPasswordResetEmail,
   sendSignInLinkToEmail,
   signInWithEmailAndPassword,
@@ -92,7 +93,10 @@ export function AuthPanel({ heading, description, footer }: AuthPanelProps) {
     try {
       const auth = getFirebaseAuth();
       if (mode === 'criar') {
-        await createUserWithEmailAndPassword(auth, email, password);
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        // Conta por senha nasce com o email não verificado, e a API recusa
+        // esses tokens — manda a confirmação já na criação.
+        await sendEmailVerification(cred.user);
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }

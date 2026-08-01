@@ -13,6 +13,7 @@ type PrismaMock = {
   tenant: { findUnique: jest.Mock };
   user: { findUnique: jest.Mock };
   $transaction: jest.Mock;
+  withGlobalScope: jest.Mock;
   tx: TxMock;
 };
 
@@ -22,11 +23,15 @@ function buildPrismaMock(): PrismaMock {
     user: { create: jest.fn() },
     $queryRaw: jest.fn().mockResolvedValue(undefined),
   };
-  return {
+  const models = {
     plan: { findUnique: jest.fn() },
     tenant: { findUnique: jest.fn() },
     user: { findUnique: jest.fn() },
+  };
+  return {
+    ...models,
     $transaction: jest.fn(async (cb: (t: TxMock) => Promise<unknown>) => cb(tx)),
+    withGlobalScope: jest.fn(async (fn: (t: typeof models) => unknown) => fn(models)),
     tx,
   };
 }
@@ -35,9 +40,10 @@ const input: CreateTenantInput = {
   slug: 'clinica-arte',
   name: 'Clínica Arte de Cuidar',
   category: 'PSICOLOGIA',
-  ownerEmail: 'owner@example.com',
-  ownerName: 'Ana Owner',
 };
+
+// Email do dono: vem do token verificado, não do corpo do request.
+const OWNER_EMAIL = 'owner@example.com';
 
 describe('TenantsService.createTenant', () => {
   let prisma: PrismaMock;
@@ -51,20 +57,20 @@ describe('TenantsService.createTenant', () => {
 
   it('throws NotFoundException when FREE plan is missing', async () => {
     prisma.plan.findUnique.mockResolvedValue(null);
-    await expect(service.createTenant(input, 'uid-1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.createTenant(input, 'uid-1', OWNER_EMAIL)).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('throws ConflictException when slug is taken', async () => {
     prisma.plan.findUnique.mockResolvedValue({ id: 'plan-free', code: 'FREE' });
     prisma.tenant.findUnique.mockResolvedValue({ id: 't-existing', slug: input.slug });
-    await expect(service.createTenant(input, 'uid-1')).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.createTenant(input, 'uid-1', OWNER_EMAIL)).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('throws ConflictException when firebase uid already owns a tenant', async () => {
     prisma.plan.findUnique.mockResolvedValue({ id: 'plan-free', code: 'FREE' });
     prisma.tenant.findUnique.mockResolvedValue(null);
     prisma.user.findUnique.mockResolvedValue({ id: 'u-1', firebaseUid: 'uid-1' });
-    await expect(service.createTenant(input, 'uid-1')).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.createTenant(input, 'uid-1', OWNER_EMAIL)).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('creates tenant + owner user inside a transaction with SET LOCAL app.tenant_id', async () => {
@@ -84,7 +90,7 @@ describe('TenantsService.createTenant', () => {
     prisma.tx.tenant.create.mockResolvedValue(createdTenant);
     prisma.tx.user.create.mockResolvedValue({ id: 'user-1' });
 
-    const result = await service.createTenant(input, 'uid-owner');
+    const result = await service.createTenant(input, 'uid-owner', OWNER_EMAIL);
 
     expect(result).toBe(createdTenant);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
@@ -105,7 +111,7 @@ describe('TenantsService.createTenant', () => {
     expect(prisma.tx.user.create).toHaveBeenCalledWith({
       data: {
         firebaseUid: 'uid-owner',
-        email: input.ownerEmail,
+        email: OWNER_EMAIL,
         tenantId: 'tenant-1',
         role: 'OWNER',
       },
@@ -120,7 +126,7 @@ describe('TenantsService.createTenant', () => {
     prisma.tx.user.create.mockResolvedValue({ id: 'u-1' });
 
     const before = Date.now();
-    await service.createTenant(input, 'uid-owner');
+    await service.createTenant(input, 'uid-owner', OWNER_EMAIL);
     const after = Date.now();
 
     const call = prisma.tx.tenant.create.mock.calls[0][0];

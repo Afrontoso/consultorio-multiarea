@@ -1,4 +1,0 @@
-{
-  "extends": "@consultorio/config/tsconfig/package.json",
-  "include": ["src"]
-}
